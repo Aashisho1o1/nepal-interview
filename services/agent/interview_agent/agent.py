@@ -112,7 +112,8 @@ async def entrypoint(ctx: JobContext) -> None:
         },
         user_away_timeout=AWAY_TIMEOUT_S,
     )
-    renderer = make_avatar(cfg["mode"], max_session_s=max_provider_s, max_idle_s=60)
+    avatar_name = cfg["providers"].get("avatar") if cfg["mode"] == "avatar" else None
+    renderer = make_avatar(avatar_name, max_session_s=max_provider_s, max_idle_s=60)
 
     async def flush_turns() -> None:
         pending = turns.take_pending()

@@ -1,250 +1,140 @@
 "use client";
 
-import {
-  Participant,
-  RemoteParticipant,
-  RemoteTrack,
-  Room,
-  RoomEvent,
-  Track,
-} from "livekit-client";
+// The interview page knows nothing about vendors. It lets the student pick an
+// interviewer (provider), asks the API to start a session, and renders whichever
+// stage matches the returned launch.kind. Clock, End, page-exit cleanup, and the move
+// to feedback are shared by every provider.
+
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { CLIENT_DRIVEN, STAGES } from "@/components/stages";
 import { api, ApiError, fmtSeconds, Me } from "@/lib/api";
+import { PHASE_TEXT, type Launch, type Phase, type ProviderInfo, type StageProps, type StartResp } from "@/lib/providers";
 
-type Mode = "avatar" | "voice";
-type Phase =
-  | "idle"
-  | "starting"
-  | "connecting"
-  | "ready"
-  | "listening"
-  | "thinking"
-  | "speaking"
-  | "interrupted"
-  | "reconnecting"
-  | "completed"
-  | "error";
-
-type StartResp = {
-  session_id: string;
-  server_url: string;
-  participant_token: string;
-  mode: Mode;
-  practice_seconds: number;
-  disclosure: string;
-};
-
-const PHASE_TEXT: Record<Phase, string> = {
-  idle: "",
-  starting: "Reserving your session…",
-  connecting: "Connecting to the interviewer…",
-  ready: "Ready",
-  listening: "Listening",
-  thinking: "Thinking…",
-  speaking: "Interviewer speaking",
-  interrupted: "Interrupted — go ahead",
-  reconnecting: "Reconnecting…",
-  completed: "Session complete",
-  error: "",
-};
-
-// The avatar publishes on behalf of the agent and carries this attribute.
-const ON_BEHALF = "lk.publish_on_behalf";
 const KEY_STORE = "ni-start-key";
+// Our agent ends LiveKit sessions itself; this is only a safety net after its closing line.
+const AGENT_END_GRACE_S = 20;
+
+type Live = { id: string; launch: Launch; mode: "avatar" | "voice"; disclosure: string };
 
 export default function Interview() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
-  const [mode, setMode] = useState<Mode>("avatar");
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [providerId, setProviderId] = useState<string>("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState("");
-  const [display, setDisplay] = useState<"avatar" | "portrait">("portrait");
-  const [fallback, setFallback] = useState("");
+  const [notice, setNotice] = useState("");
+  const [live, setLive] = useState<Live | null>(null);
   const [endsAt, setEndsAt] = useState<number | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(0);
   const [liveConflict, setLiveConflict] = useState<string | null>(null);
-  const [disclosure, setDisclosure] = useState("");
-
-  const roomRef = useRef<Room | null>(null);
-  const sessionRef = useRef<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const audioSourceRef = useRef<{ track: RemoteTrack; fromAvatar: boolean } | null>(null);
   const endedRef = useRef(false);
-  // Set by the agent when it begins teardown, so a normal end is never mistaken for a failure.
-  const endingRef = useRef<string>("");
+  const sessionRef = useRef<string | null>(null);
 
   useEffect(() => {
-    api<Me>("/me")
-      .then((m) => {
+    Promise.all([api<Me>("/me"), api<ProviderInfo[]>("/providers")])
+      .then(([m, ps]) => {
         setMe(m);
-        if (!m.avatar_available) setMode("voice");
+        setProviders(ps);
+        setProviderId((cur) => cur || ps[0]?.id || "");
       })
       .catch((e) => {
         if (e instanceof ApiError && e.status === 401) router.push("/");
+        else setError("Could not load interviewers.");
       });
   }, [router]);
 
-  useEffect(() => {
-    if (!endsAt) return;
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, [endsAt]);
-
-  // Leaving the page ends the session server-side (settles billing, closes the room).
+  // Leaving the page ends the session server-side (settles billing, closes vendor media).
   useEffect(() => {
     const onHide = () => {
       const id = sessionRef.current;
       if (id && !endedRef.current) {
         endedRef.current = true;
-        navigator.sendBeacon(`/api/sessions/${id}/end`, new Blob([""], { type: "text/plain" }));
+        navigator.sendBeacon(`/api/sessions/${id}/end?reason=page_exit`, new Blob([""], { type: "text/plain" }));
       }
     };
     window.addEventListener("pagehide", onHide);
-    return () => {
-      window.removeEventListener("pagehide", onHide);
-      void roomRef.current?.disconnect();
-    };
+    return () => window.removeEventListener("pagehide", onHide);
   }, []);
 
   const finish = useCallback(
     (reason: string) => {
       const id = sessionRef.current;
-      const room = roomRef.current;
-      roomRef.current = null;
-      room?.removeAllListeners();
-      void room?.disconnect();
-      audioSourceRef.current?.track.detach();
-      audioSourceRef.current = null;
+      setLive(null); // unmounts the stage: disconnects LiveKit / removes the vendor iframe
       setEndsAt(null);
+      sessionRef.current = null;
       if (reason === "avatar_lost") {
         setPhase("error");
-        setError("The avatar disconnected. Unused time was returned. You can continue with voice practice.");
-        setMode("voice");
-        sessionRef.current = null;
+        setError("The video interviewer disconnected. Unused time was returned. You can continue with voice only.");
+        const voice = providers.find((p) => p.modality === "voice");
+        if (voice) setProviderId(voice.id);
         return;
       }
       setPhase("completed");
       if (id) router.push(`/sessions/${id}`);
     },
-    [router],
+    [providers, router],
   );
 
-  function attachAudio(track: RemoteTrack, participant: RemoteParticipant) {
-    // Exactly one interviewer audio stream: the avatar's when present, else the agent's.
-    const fromAvatar = Boolean(participant.attributes[ON_BEHALF]);
-    const cur = audioSourceRef.current;
-    if (cur && cur.fromAvatar && !fromAvatar) return;
-    cur?.track.detach();
-    if (audioRef.current) track.attach(audioRef.current);
-    audioSourceRef.current = { track, fromAvatar };
-  }
-
-  function readAgentAttributes(p: Participant) {
-    if (!p.isAgent || p.attributes[ON_BEHALF]) return;
-    const a = p.attributes;
-    if (a["ni.practice_ends_at_ms"]) setEndsAt(Number(a["ni.practice_ends_at_ms"]));
-    if (a["ni.display"] === "avatar" || a["ni.display"] === "portrait") setDisplay(a["ni.display"]);
-    if (a["ni.fallback"]) setFallback(a["ni.fallback"]);
-    if (a["ni.ending"]) endingRef.current = a["ni.ending"];
-    const st = a["lk.agent.state"];
-    setPhase((prev) => {
-      if (["completed", "error", "reconnecting"].includes(prev)) return prev;
-      if (st === "speaking" || st === "thinking") return st;
-      if (st === "listening") {
-        const room = roomRef.current;
-        // The student started talking over the interviewer: show the hand-back.
-        if (prev === "speaking" && room?.localParticipant.isSpeaking) {
-          setTimeout(() => setPhase((p) => (p === "interrupted" ? "listening" : p)), 1200);
-          return "interrupted";
-        }
-        return "listening";
+  const endNow = useCallback(
+    async (reason = "ended") => {
+      const id = sessionRef.current;
+      if (id && !endedRef.current) {
+        endedRef.current = true;
+        const r = reason === "ended" ? "student_ended" : reason;
+        await api(`/sessions/${id}/end?reason=${encodeURIComponent(r)}`, { method: "POST" }).catch(() => undefined);
       }
-      return prev === "connecting" && a["ni.practice_ends_at_ms"] ? "ready" : prev;
-    });
-  }
+      finish(reason);
+    },
+    [finish],
+  );
+
+  const remaining = endsAt && now ? (endsAt - now) / 1000 : null;
+
+  // Clock tick + deadline. For embeds/hosted vendors the browser is the only thing that
+  // can stop the vendor stream, so it ends exactly at the server-set time. For our own
+  // agent (which ends the call itself) it is only a backstop.
+  useEffect(() => {
+    if (!endsAt || !live) return;
+    const graceMs = CLIENT_DRIVEN.has(live.launch.kind) ? 0 : AGENT_END_GRACE_S * 1000;
+    const t = setInterval(() => {
+      const ts = Date.now();
+      setNow(ts);
+      if (ts >= endsAt + graceMs) void endNow("deadline");
+    }, 250);
+    return () => clearInterval(t);
+  }, [endsAt, live, endNow]);
 
   async function start() {
     setError("");
+    setNotice("");
     setLiveConflict(null);
-    setFallback("");
     endedRef.current = false;
-    endingRef.current = "";
     setPhase("starting");
-    // One key per intended start, reused on retry/double-click so the server
-    // returns the same session instead of reserving twice.
+    // One key per intended start, reused on retry/double-click so the server returns the
+    // same session (and the same vendor conversation) instead of reserving twice.
     let key = sessionStorage.getItem(KEY_STORE);
     if (!key) {
       key = crypto.randomUUID();
       sessionStorage.setItem(KEY_STORE, key);
     }
-    let s: StartResp;
     try {
-      s = await api<StartResp>("/sessions", {
+      const s = await api<StartResp>("/sessions", {
         method: "POST",
         headers: { "idempotency-key": key },
-        json: { track: "us_f1", format_id: "pressure_drill_3m", mode },
+        json: { track: "us_f1", format_id: "pressure_drill_3m", provider_id: providerId },
       });
+      sessionStorage.removeItem(KEY_STORE);
+      sessionRef.current = s.session_id;
+      setLive({ id: s.session_id, launch: s.launch, mode: s.mode, disclosure: s.disclosure });
+      setPhase("connecting");
     } catch (e) {
       sessionStorage.removeItem(KEY_STORE);
       setPhase("error");
-      if (e instanceof ApiError && e.code === "session_already_live") {
-        setLiveConflict(String(e.body.session_id ?? ""));
-      }
+      if (e instanceof ApiError && e.code === "session_already_live") setLiveConflict(String(e.body.session_id ?? ""));
       setError(e instanceof ApiError ? e.message : "Could not start.");
-      return;
     }
-    sessionStorage.removeItem(KEY_STORE);
-    sessionRef.current = s.session_id;
-    setDisclosure(s.disclosure);
-    setDisplay(s.mode === "avatar" ? "avatar" : "portrait");
-    setPhase("connecting");
-
-    const room = new Room({ adaptiveStream: true, dynacast: true });
-    roomRef.current = room;
-    room
-      .on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
-        if (track.kind === Track.Kind.Video && videoRef.current) track.attach(videoRef.current);
-        if (track.kind === Track.Kind.Audio) attachAudio(track, participant);
-      })
-      .on(RoomEvent.TrackUnsubscribed, (track) => {
-        track.detach();
-        if (audioSourceRef.current?.track === track) audioSourceRef.current = null;
-      })
-      .on(RoomEvent.ParticipantAttributesChanged, (_changed, p) => readAgentAttributes(p))
-      .on(RoomEvent.ParticipantConnected, (p) => readAgentAttributes(p))
-      .on(RoomEvent.Reconnecting, () => setPhase("reconnecting"))
-      .on(RoomEvent.Reconnected, () => setPhase("listening"))
-      .on(RoomEvent.Disconnected, () => {
-        if (roomRef.current === room) finish(endingRef.current === "avatar_lost" ? "avatar_lost" : "disconnected");
-      })
-      .on(RoomEvent.MediaDevicesError, () => {
-        setError("Microphone unavailable. Check permissions; the session will end if no answer is heard.");
-      });
-
-    try {
-      await room.connect(s.server_url, s.participant_token);
-      await room.localParticipant.setMicrophoneEnabled(true, {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      });
-      room.remoteParticipants.forEach((p) => readAgentAttributes(p));
-    } catch (e) {
-      const blocked = e instanceof Error && e.name === "NotAllowedError";
-      setError(blocked ? "Allow the microphone to practise." : "Could not connect.");
-      await endNow();
-    }
-  }
-
-  async function endNow() {
-    const id = sessionRef.current;
-    if (id && !endedRef.current) {
-      endedRef.current = true;
-      await api(`/sessions/${id}/end`, { method: "POST" }).catch(() => undefined);
-    }
-    finish("ended");
   }
 
   async function endOther() {
@@ -255,9 +145,9 @@ export default function Interview() {
     setPhase("idle");
   }
 
-  const remaining = endsAt ? Math.max(0, (endsAt - now) / 1000) : null;
-  const live = !["idle", "error", "completed"].includes(phase);
-  const bal = me?.balances;
+  const balanceFor = (p: ProviderInfo) =>
+    me ? fmtSeconds(me.balances[p.modality === "avatar" ? "premium_seconds" : "basic_seconds"].available) : "";
+  const Stage = live ? (STAGES[live.launch.kind] as ComponentType<StageProps<Launch>>) : null;
 
   return (
     <main>
@@ -265,64 +155,54 @@ export default function Interview() {
       {!live && (
         <>
           <p className="muted">
-            Three minutes with Maya, a fictional AI practice interviewer. She is not a consular officer
-            and this does not predict a visa decision. Answer truthfully using your confirmed facts.
+            Three minutes with a fictional AI practice interviewer. The interviewer is not a consular officer and this
+            does not predict a visa decision. Answer truthfully using your confirmed facts.
           </p>
-          <div className="choices">
-            <label className="choice">
-              <input type="radio" name="mode" checked={mode === "avatar"} disabled={!me?.avatar_available} onChange={() => setMode("avatar")} />
-              <span>
-                <strong>Video interviewer</strong>
-                <br />
-                <span className="muted">Uses more data (video). {bal && `${fmtSeconds(bal.premium_seconds.available)} left.`}</span>
-                {me && !me.avatar_available && <span className="error"> Unavailable right now.</span>}
-              </span>
-            </label>
-            <label className="choice">
-              <input type="radio" name="mode" checked={mode === "voice"} onChange={() => setMode("voice")} />
-              <span>
-                <strong>Voice only</strong>
-                <br />
-                <span className="muted">Lower data use, still image. {bal && `${fmtSeconds(bal.basic_seconds.available)} left.`}</span>
-              </span>
-            </label>
+          <div className="choices" role="radiogroup" aria-label="Interviewer">
+            {providers.map((p) => (
+              <label className="choice" key={p.id}>
+                <input type="radio" name="provider" checked={providerId === p.id} onChange={() => setProviderId(p.id)} />
+                <span>
+                  <strong>{p.label}</strong>
+                  <br />
+                  <span className="muted">
+                    {p.data_note} {me && `${balanceFor(p)} left.`}
+                    {p.capabilities.transcripts === false && " No scorecard for this one yet; you'll rate it instead."}
+                  </span>
+                </span>
+              </label>
+            ))}
+            {me && providers.length === 0 && <p className="error">No interviewer is available right now.</p>}
           </div>
-          <p className="muted">
-            Your microphone audio goes to the voice provider (OpenAI) through LiveKit. In video mode the
-            interviewer&apos;s generated speech also goes to Simli to animate the face. Calls are not
-            recorded; the transcript is kept for your feedback.
-          </p>
-          <button onClick={start} disabled={phase === "starting" || !me}>
+          <button onClick={start} disabled={phase === "starting" || !me || !providerId} style={{ marginTop: 12 }}>
             Start practice
           </button>
         </>
       )}
 
-      {live && (
+      {live && Stage && (
         <>
-          <div className="stage">
-            <video ref={videoRef} autoPlay playsInline muted style={{ display: display === "avatar" ? "block" : "none" }} />
-            {display === "portrait" && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src="/interviewer-portrait.svg" alt="Fictional practice interviewer" />
-            )}
+          <div className="stage-wrap">
+            <Stage
+              sessionId={live.id}
+              launch={live.launch}
+              mode={live.mode}
+              onPhase={setPhase}
+              onClock={setEndsAt}
+              onNotice={setNotice}
+              onEnded={(reason) => void endNow(reason)}
+            />
             <span className="badge">Fictional AI interviewer · practice</span>
-            {remaining !== null && <span className="clock">{fmtSeconds(remaining)}</span>}
+            {remaining !== null && <span className="clock">{fmtSeconds(Math.max(0, remaining))}</span>}
           </div>
           <div className="state" aria-live="polite">{PHASE_TEXT[phase]}</div>
-          {fallback && (
-            <p className="muted" role="status">
-              The video interviewer could not start, so this session continues in voice. Voice time is
-              billed at the voice rate.
-            </p>
-          )}
-          {disclosure && <p className="muted">{disclosure}</p>}
-          <button className="danger" onClick={endNow} style={{ width: "100%" }}>
+          {notice && <p className="muted" role="status">{notice}</p>}
+          {live.disclosure && <p className="muted">{live.disclosure}</p>}
+          <button className="danger" onClick={() => void endNow()} style={{ width: "100%" }}>
             End session
           </button>
         </>
       )}
-      <audio ref={audioRef} autoPlay />
       {error && <p className="error" role="alert">{error}</p>}
       {liveConflict && (
         <button className="secondary" onClick={endOther}>End the other session</button>

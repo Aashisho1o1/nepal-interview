@@ -15,6 +15,8 @@ services/agent/interview_agent/  LiveKit Agents worker: voice + avatar adapters,
 packages/core/interview_core/    tracks, facts, funding maths, interview policy, scorecard, graders
 config/prices.json           versioned price table (planning snapshot; OpenAI deliberately unpriced)
 scripts/measurement_report.py    latency / interruption / reliability / cost from recorded sessions
+scripts/provider_comparison.py   side-by-side provider results (LiveAvatar embed, Tavus, own pipeline)
+config/providers.json        interview providers offered to students (see docs/PROVIDERS.md)
 tests/                       pytest (Postgres-backed API tests, agent runtime, domain)
 ```
 

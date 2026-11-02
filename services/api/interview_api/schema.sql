@@ -169,3 +169,26 @@ CREATE TABLE IF NOT EXISTS audit_events (
   detail        JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ---------------------------------------------------------------- providers (v2)
+-- Which provider delivered the session, the vendor's id for it, and the launch
+-- payload (so an idempotent retry never creates a second vendor conversation).
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS provider_id TEXT NOT NULL DEFAULT 'livekit_voice';
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS vendor_ref TEXT;
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS launch_json JSONB;
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS launch_claimed_at TIMESTAMPTZ;
+CREATE UNIQUE INDEX IF NOT EXISTS sessions_vendor_ref
+  ON interview_sessions (provider_id, vendor_ref) WHERE vendor_ref IS NOT NULL;
+
+-- Student ratings after each mock: the same questions for every provider, so
+-- providers can be compared on experience, not just on our own metrics.
+CREATE TABLE IF NOT EXISTS session_ratings (
+  session_id      UUID PRIMARY KEY REFERENCES interview_sessions(id) ON DELETE CASCADE,
+  realism         SMALLINT NOT NULL CHECK (realism BETWEEN 1 AND 5),
+  reply_speed     TEXT NOT NULL CHECK (reply_speed IN ('instant','slight_pause','noticeably_slow','frustrating')),
+  audio_video_ok  BOOLEAN NOT NULL,
+  would_use_again BOOLEAN NOT NULL,
+  comment         TEXT CHECK (length(comment) <= 1000),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);

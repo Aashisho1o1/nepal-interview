@@ -98,6 +98,7 @@ async def start_session(
     snapshot_id,
     providers: dict,
     policy_version: str,
+    provider_id: str = "livekit_voice",
 ) -> StartResult:
     if not (8 <= len(idempotency_key) <= 128):
         raise QuotaError(400, "bad_idempotency_key", "Idempotency-Key must be 8-128 characters")
@@ -146,8 +147,8 @@ async def start_session(
                         """INSERT INTO interview_sessions
                            (student_id, snapshot_id, idempotency_key, track, format_id, mode, display,
                             providers, policy_version, room_name, status, practice_seconds,
-                            hard_deadline_at)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'created',%s,%s) RETURNING *""",
+                            hard_deadline_at, provider_id)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'created',%s,%s,%s) RETURNING *""",
                         (
                             student_id,
                             snapshot_id,
@@ -161,6 +162,7 @@ async def start_session(
                             room,
                             practice_seconds,
                             hard_deadline,
+                            provider_id,
                         ),
                     )
                     sess = await cur.fetchone()

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import RatingForm, { type Rating } from "@/components/RatingForm";
 import { api, ApiError, fmtSeconds } from "@/lib/api";
 
 type Turn = { turn_id: string; speaker: "student" | "interviewer"; text: string; start_ms: number; canceled: boolean };
@@ -35,6 +36,8 @@ type Resp = {
     charged_basic_seconds: number | null;
     waived_seconds: number | null;
   };
+  provider: { transcripts: boolean };
+  rating: Rating | null;
   turns: Turn[];
   feedback: null | { status: "pending" | "ready" | "failed"; report: Report | null; error: string | null };
 };
@@ -68,7 +71,11 @@ export default function SessionPage() {
         const r = await api<Resp>(`/sessions/${id}/feedback`);
         if (stop) return;
         setData(r);
-        const done = r.feedback?.status === "ready" || r.feedback?.status === "failed" || r.session.status === "failed";
+        const done =
+          r.feedback?.status === "ready" ||
+          r.feedback?.status === "failed" ||
+          r.session.status === "failed" ||
+          !r.provider.transcripts;
         if (!done && tries++ < 40) setTimeout(poll, 1500);
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) router.push("/");
@@ -84,8 +91,11 @@ export default function SessionPage() {
   if (error) return <main><p className="error">{error}</p></main>;
   if (!data) return <main><p>Loading…</p></main>;
 
-  const { session, turns, feedback } = data;
+  const { session, turns, feedback, provider } = data;
   const report = feedback?.report;
+  // Hosted vendors (e.g. Tavus) send text without timings; don't show fake 0:00 stamps.
+  const timed = turns.some((t) => t.start_ms > 0);
+  const ended = session.status !== "created" && session.status !== "active";
   return (
     <main>
       <h1>Practice feedback</h1>
@@ -107,7 +117,15 @@ export default function SessionPage() {
         </p>
       </div>
 
-      {session.status !== "failed" && (!feedback || feedback.status === "pending") && <p>Preparing feedback…</p>}
+      {!provider.transcripts && session.status !== "failed" && (
+        <p className="muted">
+          This interviewer doesn&apos;t share a transcript with us yet, so there is no scorecard for this session. Your
+          rating below helps choose the best interviewer.
+        </p>
+      )}
+      {provider.transcripts && session.status !== "failed" && (!feedback || feedback.status === "pending") && (
+        <p>Preparing feedback…</p>
+      )}
       {feedback?.status === "failed" && <p className="error">{feedback.error}</p>}
 
       {report && (
@@ -125,7 +143,8 @@ export default function SessionPage() {
                 {f.requires_counselor_review && <span className="pill warn">counsellor review</span>}
               </div>
               <blockquote>
-                <a href={`#${f.turn_id}`}>“{f.observed_quote}”</a> <span className="muted nums">at {fmtSeconds(f.start_ms / 1000)}</span>
+                <a href={`#${f.turn_id}`}>“{f.observed_quote}”</a>
+                {timed && <span className="muted nums"> at {fmtSeconds(f.start_ms / 1000)}</span>}
               </blockquote>
               <p>{f.explanation}</p>
               <p><strong>Next:</strong> {f.next_action}</p>
@@ -157,7 +176,8 @@ export default function SessionPage() {
             {turns.map((t) => (
               <div id={t.turn_id} key={t.turn_id} className={`turn ${t.canceled ? "canceled" : ""}`}>
                 <div className="who nums">
-                  {t.speaker === "student" ? "You" : "Interviewer"} · {fmtSeconds(t.start_ms / 1000)}
+                  {t.speaker === "student" ? "You" : "Interviewer"}
+                  {timed && ` · ${fmtSeconds(t.start_ms / 1000)}`}
                   {t.canceled && " · interrupted"}
                 </div>
                 <div>{t.text}</div>
@@ -166,6 +186,7 @@ export default function SessionPage() {
           </div>
         </>
       )}
+      {ended && session.status !== "failed" && <RatingForm sessionId={id} initial={data.rating} />}
       <p><Link href="/interview">Practise again</Link> · <Link href="/prepare">Your facts</Link></p>
     </main>
   );

@@ -176,10 +176,20 @@ class SimliRenderer:
             await self._avatar.aclose()  # removes the avatar participant from the room
 
 
-def make_avatar(mode: str, *, max_session_s: int, max_idle_s: int) -> AvatarRenderer:
-    if mode == "avatar":
-        return SimliRenderer(max_session_s=max_session_s, max_idle_s=max_idle_s)
-    return PortraitRenderer()
+# Avatar renderers our own agent can drive, by the name in config/providers.json
+# ("avatar": "simli"). Add LiveKit avatar plugins (liveavatar, tavus, anam, bithuman)
+# here as small AvatarRenderer classes; the API side needs only a providers.json entry.
+AVATAR_RENDERERS = {"simli": SimliRenderer}
+
+
+def make_avatar(name: str | None, *, max_session_s: int, max_idle_s: int) -> AvatarRenderer:
+    if not name:
+        return PortraitRenderer()
+    try:
+        cls = AVATAR_RENDERERS[name]
+    except KeyError as e:
+        raise ValueError(f"unknown avatar renderer {name!r}") from e
+    return cls(max_session_s=max_session_s, max_idle_s=max_idle_s)
 
 
 async def start_with_fallback(

@@ -57,6 +57,12 @@ class Settings:
     price_table_path: str | None = field(default_factory=lambda: os.getenv("PRICE_TABLE_PATH"))
     # "livekit" in every real deployment; "fake" only for UI work without LiveKit.
     media_backend: str = field(default_factory=lambda: os.getenv("MEDIA_BACKEND", "livekit"))
+    providers_file: str | None = field(default_factory=lambda: os.getenv("PROVIDERS_FILE"))
+    # Browser-reported heartbeats (embeds/hosted vendors) get more slack than our agent:
+    # mobile browsers throttle timers when the screen dims.
+    client_heartbeat_timeout_s: int = field(
+        default_factory=lambda: _int("CLIENT_HEARTBEAT_TIMEOUT_S", 90)
+    )
     room_prefix: str = "ni-"
 
 

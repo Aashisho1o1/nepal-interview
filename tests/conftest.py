@@ -63,12 +63,19 @@ class Env:
 async def make_env():
     created = []
 
-    async def _make(**kw) -> Env:
+    async def _make(*, provider_env: dict | None = None, provider_http=None, **kw) -> Env:
         reset_db()
         s = settings(**kw)
         media = FakeMedia()
         pool = make_pool(TEST_DSN, max_size=30)
-        app = create_app(s, media=media, pool=pool)
+        # Hermetic: never read provider URLs/keys from the developer's environment.
+        app = create_app(
+            s,
+            media=media,
+            pool=pool,
+            provider_env=provider_env or {},
+            provider_http=provider_http,
+        )
         cm = app.router.lifespan_context(app)
         await cm.__aenter__()
         created.append((cm, pool))
