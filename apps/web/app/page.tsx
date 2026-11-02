@@ -67,7 +67,8 @@ export default function Home() {
   }
 
   const firstName = me?.display_name.split(" ")[0];
-  const videoOff = me !== null && !me.avatar_available;
+  const videoOff = me !== null && !me.video_available;
+  const voiceOff = me !== null && !me.voice_available;
 
   return (
     <main className="landing" id="top">
@@ -183,7 +184,7 @@ export default function Home() {
               type="button"
               className="mode-card voice"
               aria-pressed={mode === "voice"}
-              disabled={busy}
+              disabled={busy || voiceOff}
               onClick={() => choose("voice")}
             >
               <span className="mode-art"><ArtVoice /></span>
@@ -191,7 +192,8 @@ export default function Home() {
               <span className="mode-desc">Just your voice and theirs. Light on data and great for practising on your phone.</span>
               <span className="tags">
                 <span className="tag">Works on mobile data</span>
-                {me && <span className="tag">{fmtSeconds(me.balances.basic_seconds.available)} left</span>}
+                {me && !voiceOff && <span className="tag">{fmtSeconds(me.balances.basic_seconds.available)} left</span>}
+                {voiceOff && <span className="tag">Not available right now</span>}
               </span>
               <span className="mode-go">Practise with voice →</span>
             </button>

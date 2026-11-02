@@ -37,7 +37,6 @@ export default function IframeStage({ sessionId, launch, onPhase, onClock, onNot
     try {
       const r = await post("media_ready", {
         trigger,
-        display: "avatar",
         load_ms: loadedAt.current ? Math.round(loadedAt.current - mountedAt.current) : null,
         ready_ms: Math.round(now - mountedAt.current),
       });

@@ -316,17 +316,17 @@ async def test_browser_exit_beacon_settles_and_marks_vendor_closed(make_env):
         headers={"content-type": "text/plain;charset=UTF-8"},
     )
     assert r.status_code == 200 and r.json()["end_reason"] == "student_ended"
-    row = (await env.sql("SELECT room_closed_at FROM interview_sessions"))[0]
-    assert row["room_closed_at"] is not None
+    row = (await env.sql("SELECT vendor_closed_at FROM interview_sessions"))[0]
+    assert row["vendor_closed_at"] is not None
     assert (await end(c, sid)).json()["end_reason"] == "student_ended"  # idempotent
     assert (await start(c)).status_code == 200  # a new session can start once settled
 
 
 async def test_kill_switch_disabled_track_and_rate_limit(make_env):
-    env = await make_env(avatar_enabled=False, max_starts_per_10min=2)
+    env = await make_env(video_tier_enabled=False, max_starts_per_10min=2)
     c = await ready_student(env)
     r = await start(c)
-    assert r.status_code == 503 and r.json()["error"] == "avatar_unavailable"
+    assert r.status_code == 503 and r.json()["error"] == "tier_unavailable"
     for _ in range(2):
         sid = (await start(c, VOICE)).json()["session_id"]
         await end(c, sid)
@@ -364,7 +364,7 @@ async def test_reconciler_reclaims_startup_timeouts_and_stale_sessions(make_env)
     assert rows[uuid.UUID(sa)]["charged_premium_seconds"] == 0
     assert rows[uuid.UUID(sb)]["status"] == "completed"
     assert rows[uuid.UUID(sb)]["charged_basic_seconds"] == 30  # until the last heartbeat
-    assert all(r["room_closed_at"] is not None for r in rows.values())
+    assert all(r["vendor_closed_at"] is not None for r in rows.values())
     assert (await balance(a))["available"] == 900
     assert (await balance(b, "basic_seconds"))["consumed"] == 30
     rep2 = await reconcile_once(env.pool, env.s, env.registry, feedback_grace_s=0)

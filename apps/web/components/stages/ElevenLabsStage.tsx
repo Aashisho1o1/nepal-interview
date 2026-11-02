@@ -51,7 +51,6 @@ export default function ElevenLabsStage({ sessionId, launch, onPhase, onClock, o
           try {
             const r = await post("media_ready", {
               trigger: "elevenlabs_connect",
-              display: "voice",
               ready_ms: Math.round(performance.now() - mountedAt),
             });
             if (r.practice_ends_at) cb.current.onClock(r.practice_ends_at * 1000);

@@ -1,5 +1,5 @@
--- Milestone one schema. A subset of the handoff's logical model; counselor,
--- organization, order and settlement tables arrive with the pilot milestone.
+-- Schema. Applied on every API start; every statement is idempotent, and the
+-- migrations block at the end upgrades databases created by earlier versions.
 -- Money and usage: integers in minor units / seconds; provider quantities NUMERIC.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -73,25 +73,28 @@ CREATE TABLE IF NOT EXISTS interview_sessions (
   idempotency_key   TEXT NOT NULL,
   track             TEXT NOT NULL,
   format_id         TEXT NOT NULL,
-  mode              TEXT NOT NULL CHECK (mode IN ('avatar','voice')),
-  display           TEXT NOT NULL CHECK (display IN ('avatar','portrait')),
-  providers         JSONB NOT NULL,
+  mode              TEXT NOT NULL CHECK (mode IN ('avatar','voice')),  -- tier: video | voice
+  provider_id       TEXT NOT NULL,          -- which interviewer delivered it (config/providers.json)
+  providers         JSONB NOT NULL,         -- provider details stored for reporting
   policy_version    TEXT NOT NULL,
-  room_name         TEXT NOT NULL UNIQUE,
   status            TEXT NOT NULL CHECK (status IN ('created','active','completed','failed')),
   practice_seconds  INT NOT NULL,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   hard_deadline_at  TIMESTAMPTZ NOT NULL,   -- nothing may run after this
   media_ready_at    TIMESTAMPTZ,            -- student-facing clock starts here
   practice_ends_at  TIMESTAMPTZ,
-  fallback_at       TIMESTAMPTZ,            -- avatar -> voice
-  last_heartbeat_at TIMESTAMPTZ,
+  last_heartbeat_at TIMESTAMPTZ,            -- browser heartbeats keep the session live
   ended_at          TIMESTAMPTZ,
-  room_closed_at    TIMESTAMPTZ,            -- media room confirmed deleted
+  vendor_closed_at  TIMESTAMPTZ,            -- vendor session confirmed stopped
   end_reason        TEXT,
   charged_premium_seconds INT,
   charged_basic_seconds   INT,
   waived_seconds          INT,
+  -- The vendor's id for the session and the launch payload, so an idempotent retry
+  -- never creates a second vendor conversation.
+  vendor_ref        TEXT,
+  launch_json       JSONB,
+  launch_claimed_at TIMESTAMPTZ,
   UNIQUE (student_id, idempotency_key)
 );
 -- At most one live session per student, enforced by the database, so a refresh or a
@@ -170,13 +173,6 @@ CREATE TABLE IF NOT EXISTS audit_events (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ---------------------------------------------------------------- providers (v2)
--- Which provider delivered the session, the vendor's id for it, and the launch
--- payload (so an idempotent retry never creates a second vendor conversation).
-ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS provider_id TEXT NOT NULL DEFAULT 'livekit_voice';
-ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS vendor_ref TEXT;
-ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS launch_json JSONB;
-ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS launch_claimed_at TIMESTAMPTZ;
 CREATE UNIQUE INDEX IF NOT EXISTS sessions_vendor_ref
   ON interview_sessions (provider_id, vendor_ref) WHERE vendor_ref IS NOT NULL;
 
@@ -192,3 +188,16 @@ CREATE TABLE IF NOT EXISTS session_ratings (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ---------------------------------------------------------------- migrations
+-- Databases created before 2026-11-02 (own LiveKit pipeline). Safe to re-run.
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS provider_id TEXT NOT NULL DEFAULT 'unknown';
+ALTER TABLE interview_sessions ALTER COLUMN provider_id DROP DEFAULT;
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS vendor_ref TEXT;
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS launch_json JSONB;
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS launch_claimed_at TIMESTAMPTZ;
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS vendor_closed_at TIMESTAMPTZ;
+ALTER TABLE interview_sessions DROP COLUMN IF EXISTS display;
+ALTER TABLE interview_sessions DROP COLUMN IF EXISTS room_name;
+ALTER TABLE interview_sessions DROP COLUMN IF EXISTS fallback_at;
+ALTER TABLE interview_sessions DROP COLUMN IF EXISTS room_closed_at;

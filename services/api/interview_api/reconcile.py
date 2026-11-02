@@ -28,8 +28,8 @@ log = logging.getLogger("interview_api.reconcile")
 async def _mark_vendor_closed(pool, session_id) -> None:
     async with pool.connection() as conn:
         await conn.execute(
-            "UPDATE interview_sessions SET room_closed_at = now() WHERE id=%s "
-            "AND room_closed_at IS NULL",
+            "UPDATE interview_sessions SET vendor_closed_at = now() WHERE id=%s "
+            "AND vendor_closed_at IS NULL",
             (session_id,),
         )
 
@@ -78,7 +78,7 @@ async def reconcile_once(pool, s: Settings, registry, *, feedback_grace_s: int =
     async with pool.connection() as conn:
         cur = await conn.execute(
             """SELECT * FROM interview_sessions WHERE status IN ('completed','failed')
-               AND room_closed_at IS NULL AND ended_at > now() - interval '1 day'"""
+               AND vendor_closed_at IS NULL AND ended_at > now() - interval '1 day'"""
         )
         unclosed = await cur.fetchall()
         cur = await conn.execute(

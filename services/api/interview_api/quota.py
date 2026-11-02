@@ -11,14 +11,13 @@ Invariants (tested in tests/test_api.py):
   are still recorded in usage_ledger.
 * Failed startup (media never ready) and very short sessions with no student speech
   are refunded in full.
-* After an avatar->voice fallback, avatar seconds are charged to the premium bucket
-  and voice seconds to the basic bucket, up to its balance; any remainder is waived.
+* A session belongs to one tier: video sessions charge the premium bucket, voice
+  sessions the basic bucket.
 """
 
 from __future__ import annotations
 
 import math
-import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -142,13 +141,12 @@ async def start_session(
                     hard_deadline = now + timedelta(
                         seconds=budget + practice_seconds + s.closing_grace_s
                     )
-                    room = f"{s.room_prefix}{secrets.token_hex(12)}"
                     cur = await conn.execute(
                         """INSERT INTO interview_sessions
-                           (student_id, snapshot_id, idempotency_key, track, format_id, mode, display,
-                            providers, policy_version, room_name, status, practice_seconds,
+                           (student_id, snapshot_id, idempotency_key, track, format_id, mode,
+                            providers, policy_version, status, practice_seconds,
                             hard_deadline_at, provider_id)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'created',%s,%s,%s) RETURNING *""",
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'created',%s,%s,%s) RETURNING *""",
                         (
                             student_id,
                             snapshot_id,
@@ -156,10 +154,8 @@ async def start_session(
                             track,
                             format_id,
                             mode,
-                            "avatar" if mode == "avatar" else "portrait",
                             Jsonb(providers),
                             policy_version,
-                            room,
                             practice_seconds,
                             hard_deadline,
                             provider_id,
@@ -244,32 +240,7 @@ async def settle_session(
             if student_turns == 0 and total <= s.no_input_refund_s:
                 waived, note = total, "no_student_speech_refund"
             elif sess["mode"] == "avatar":
-                if sess["fallback_at"] is not None:
-                    avatar_s = max(0, math.floor((sess["fallback_at"] - ready).total_seconds()))
-                    premium = min(avatar_s, total)
-                    voice_s = total - premium
-                    cur = await conn.execute(
-                        """SELECT id, granted_seconds - consumed_seconds -
-                                  (SELECT COALESCE(SUM(reserved_seconds),0) FROM usage_reservations r
-                                   WHERE r.entitlement_id = e.id AND r.state='active') AS avail
-                           FROM entitlements e WHERE student_id=%s AND bucket='basic_seconds'
-                           AND expires_at > now() ORDER BY expires_at, id FOR UPDATE""",
-                        (sess["student_id"],),
-                    )
-                    remaining = voice_s
-                    for e in await cur.fetchall():
-                        take = min(remaining, max(0, int(e["avail"])))
-                        if take:
-                            await conn.execute(
-                                "UPDATE entitlements SET consumed_seconds = consumed_seconds + %s "
-                                "WHERE id=%s",
-                                (take, e["id"]),
-                            )
-                            basic += take
-                            remaining -= take
-                    waived = remaining
-                else:
-                    premium = total
+                premium = total
             else:
                 basic = total
 

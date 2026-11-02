@@ -36,8 +36,8 @@ export type Me = {
   display_name: string;
   is_synthetic: boolean;
   balances: { premium_seconds: Balance; basic_seconds: Balance };
-  avatar_available: boolean;
-  sessions_enabled: boolean;
+  video_available: boolean;
+  voice_available: boolean;
 };
 
 export type Fact = {

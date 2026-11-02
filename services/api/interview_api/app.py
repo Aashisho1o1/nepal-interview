@@ -125,8 +125,8 @@ def create_app(
             "display_name": st["display_name"],
             "is_synthetic": st["is_synthetic"],
             "balances": bal,
-            "avatar_available": s.avatar_enabled,
-            "sessions_enabled": s.sessions_enabled,
+            "video_available": s.video_tier_enabled,
+            "voice_available": s.voice_tier_enabled,
         }
 
     @app.get("/api/tracks")
@@ -149,9 +149,10 @@ def create_app(
     async def list_providers(st=Depends(current_student)):
         """Providers offered to this student, in display order. Vendor names hidden."""
         reg = app.state.providers
-        return [
-            p.spec.public() for p in reg.enabled() if p.spec.modality == "voice" or s.avatar_enabled
-        ]
+        return [p.spec.public() for p in reg.enabled() if _tier_enabled(p.spec.modality)]
+
+    def _tier_enabled(modality: str) -> bool:
+        return s.video_tier_enabled if modality == "avatar" else s.voice_tier_enabled
 
     # ------------------------------------------------------------------ facts
     @app.get("/api/profile/facts")
@@ -268,8 +269,6 @@ def create_app(
 
     @app.post("/api/sessions", dependencies=[Depends(origin_guard)])
     async def start(body: StartBody, request: Request, st=Depends(current_student)):
-        if not s.sessions_enabled:
-            raise HTTPException(503, "Practice sessions are paused.")
         reg = app.state.providers
         try:
             prov = reg.get(body.provider_id)
@@ -278,11 +277,13 @@ def create_app(
                 422, "provider_not_available", "That interviewer is not available."
             ) from e
         mode = prov.spec.modality
-        if mode == "avatar" and not s.avatar_enabled:
+        if not _tier_enabled(mode):
             raise QuotaError(
                 503,
-                "avatar_unavailable",
-                "The avatar is unavailable right now. Choose voice practice.",
+                "tier_unavailable",
+                "The video interviewer is paused right now. Try voice practice."
+                if mode == "avatar"
+                else "The voice interviewer is paused right now.",
             )
         try:
             track = get_track(body.track)
@@ -421,13 +422,11 @@ def create_app(
             "track",
             "format_id",
             "mode",
-            "display",
             "status",
             "practice_seconds",
             "created_at",
             "media_ready_at",
             "practice_ends_at",
-            "fallback_at",
             "ended_at",
             "end_reason",
             "charged_premium_seconds",
@@ -528,22 +527,12 @@ def create_app(
                 now + timedelta(seconds=sess["practice_seconds"]),
                 sess["hard_deadline_at"] - timedelta(seconds=s.closing_grace_s),
             )
-            display = payload.get("display", sess["display"])
-            if display not in ("avatar", "portrait"):
-                display = sess["display"]
             cur = await conn.execute(
                 """UPDATE interview_sessions SET status='active', media_ready_at=%s,
-                   practice_ends_at=%s, last_heartbeat_at=%s, display=%s WHERE id=%s RETURNING *""",
-                (now, ends, now, display, sess["id"]),
+                   practice_ends_at=%s, last_heartbeat_at=%s WHERE id=%s RETURNING *""",
+                (now, ends, now, sess["id"]),
             )
             sess = await cur.fetchone()
-        elif kind == "fallback_to_voice" and live and sess["fallback_at"] is None:
-            # Before media is ready, a fallback is a voice session from the start;
-            # it is still settled from the premium reservation at zero premium seconds.
-            await conn.execute(
-                "UPDATE interview_sessions SET fallback_at=now(), display='portrait' WHERE id=%s",
-                (sess["id"],),
-            )
         elif kind == "heartbeat" and live:
             await conn.execute(
                 "UPDATE interview_sessions SET last_heartbeat_at=now() WHERE id=%s", (sess["id"],)

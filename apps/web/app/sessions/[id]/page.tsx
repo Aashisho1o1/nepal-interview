@@ -30,8 +30,6 @@ type Resp = {
   session: {
     status: string;
     end_reason: string | null;
-    display: string;
-    fallback_at: string | null;
     charged_premium_seconds: number | null;
     charged_basic_seconds: number | null;
     waived_seconds: number | null;
@@ -107,11 +105,10 @@ export default function SessionPage() {
       <div className="card">
         <div className="row">
           <span className="pill">{session.status}</span>
-          {session.fallback_at && <span className="pill warn">continued in voice</span>}
           {session.end_reason && <span className="pill">{session.end_reason.replaceAll("_", " ")}</span>}
         </div>
         <p className="muted nums">
-          Used: {fmtSeconds(session.charged_premium_seconds ?? 0)} video, {fmtSeconds(session.charged_basic_seconds ?? 0)} voice
+          Used: {fmtSeconds((session.charged_premium_seconds ?? 0) + (session.charged_basic_seconds ?? 0))}
           {session.waived_seconds ? `, ${fmtSeconds(session.waived_seconds)} not charged` : ""}.
           {session.status === "failed" && " The session did not start; no time was used."}
         </p>

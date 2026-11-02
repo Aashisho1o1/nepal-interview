@@ -54,7 +54,7 @@ async def test_provider_list_hides_vendors_and_respects_kill_switch(make_env):
     for p in ps:  # neutral labels; no vendor name, no embed URL before a session is reserved
         assert set(p) == {"id", "label", "modality", "data_note", "capabilities"}
         assert "heygen" not in p["label"].lower() and "embed.liveavatar" not in str(p)
-    off = await make_env(avatar_enabled=False)
+    off = await make_env(video_tier_enabled=False)
     c2 = await ready_student(off)
     assert [p["id"] for p in (await c2.get("/api/providers")).json()] == [VOICE]
     assert (await start(c2, VIDEO)).status_code == 503
@@ -106,8 +106,8 @@ async def test_ending_embed_settles_once(make_env):
     ends = await asyncio.gather(*[c.post(f"/api/sessions/{sid}/end") for _ in range(5)])
     assert {e.json()["charged_premium_seconds"] for e in ends} == {100}
     assert (await balance(c))["consumed"] == 100
-    row = (await env.sql("SELECT room_closed_at FROM interview_sessions"))[0]
-    assert row["room_closed_at"] is not None
+    row = (await env.sql("SELECT vendor_closed_at FROM interview_sessions"))[0]
+    assert row["vendor_closed_at"] is not None
 
 
 async def test_reconciler_gives_browser_heartbeats_slack(make_env):
