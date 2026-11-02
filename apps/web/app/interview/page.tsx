@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { CLIENT_DRIVEN, STAGES } from "@/components/stages";
 import { api, ApiError, fmtSeconds, Me } from "@/lib/api";
+import { readMode } from "@/lib/mode";
 import { PHASE_TEXT, type Launch, type Phase, type ProviderInfo, type StageProps, type StartResp } from "@/lib/providers";
 
 const KEY_STORE = "ni-start-key";
@@ -37,7 +38,9 @@ export default function Interview() {
       .then(([m, ps]) => {
         setMe(m);
         setProviders(ps);
-        setProviderId((cur) => cur || ps[0]?.id || "");
+        // Preselect the style picked on the home page (video or voice), if one matches.
+        const wanted = readMode();
+        setProviderId((cur) => cur || ps.find((p) => p.modality === wanted)?.id || ps[0]?.id || "");
       })
       .catch((e) => {
         if (e instanceof ApiError && e.status === 401) router.push("/");
