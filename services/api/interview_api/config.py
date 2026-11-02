@@ -26,7 +26,6 @@ class Settings:
     agent_name: str = field(
         default_factory=lambda: os.getenv("LIVEKIT_AGENT_NAME", "nepal-interview-agent")
     )
-    internal_api_token: str = field(default_factory=lambda: os.getenv("INTERNAL_API_TOKEN", ""))
     allowed_origins: tuple[str, ...] = field(
         default_factory=lambda: tuple(
             o.strip()

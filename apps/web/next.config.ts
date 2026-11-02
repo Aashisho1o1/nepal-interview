@@ -8,7 +8,7 @@ const API_ORIGIN = process.env.SESSION_API_ORIGIN || "http://localhost:8000";
 // for it). Without listing them here, Permissions-Policy blocks the mic inside the
 // iframe even when the iframe has allow="microphone": the embed would load but never
 // hear the student. Keep in sync with allowed_hosts in config/providers.json.
-const EMBED_ORIGINS = (process.env.EMBED_ORIGINS || "https://embed.liveavatar.com https://tavus.daily.co")
+const EMBED_ORIGINS = (process.env.EMBED_ORIGINS || "https://embed.liveavatar.com")
   .split(/[\s,]+/)
   .filter((o) => /^https?:\/\/[a-z0-9.-]+(:\d+)?$/i.test(o));
 const quoted = EMBED_ORIGINS.map((o) => `"${o}"`).join(" ");

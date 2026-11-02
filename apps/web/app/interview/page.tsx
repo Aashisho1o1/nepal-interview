@@ -7,16 +7,14 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
-import { CLIENT_DRIVEN, STAGES } from "@/components/stages";
+import { STAGES } from "@/components/stages";
 import { api, ApiError, fmtSeconds, Me } from "@/lib/api";
 import { readMode } from "@/lib/mode";
 import { PHASE_TEXT, type Launch, type Phase, type ProviderInfo, type StageProps, type StartResp } from "@/lib/providers";
 
 const KEY_STORE = "ni-start-key";
-// Our agent ends LiveKit sessions itself; this is only a safety net after its closing line.
-const AGENT_END_GRACE_S = 20;
 
-type Live = { id: string; launch: Launch; mode: "avatar" | "voice"; disclosure: string };
+type Live = { id: string; launch: Launch; disclosure: string };
 
 export default function Interview() {
   const router = useRouter();
@@ -61,24 +59,14 @@ export default function Interview() {
     return () => window.removeEventListener("pagehide", onHide);
   }, []);
 
-  const finish = useCallback(
-    (reason: string) => {
+  const finish = useCallback(() => {
       const id = sessionRef.current;
       setLive(null); // unmounts the stage: disconnects LiveKit / removes the vendor iframe
       setEndsAt(null);
       sessionRef.current = null;
-      if (reason === "avatar_lost") {
-        setPhase("error");
-        setError("The video interviewer disconnected. Unused time was returned. You can continue with voice only.");
-        const voice = providers.find((p) => p.modality === "voice");
-        if (voice) setProviderId(voice.id);
-        return;
-      }
       setPhase("completed");
       if (id) router.push(`/sessions/${id}`);
-    },
-    [providers, router],
-  );
+  }, [router]);
 
   const endNow = useCallback(
     async (reason = "ended") => {
@@ -88,23 +76,21 @@ export default function Interview() {
         const r = reason === "ended" ? "student_ended" : reason;
         await api(`/sessions/${id}/end?reason=${encodeURIComponent(r)}`, { method: "POST" }).catch(() => undefined);
       }
-      finish(reason);
+      finish();
     },
     [finish],
   );
 
   const remaining = endsAt && now ? (endsAt - now) / 1000 : null;
 
-  // Clock tick + deadline. For embeds/hosted vendors the browser is the only thing that
-  // can stop the vendor stream, so it ends exactly at the server-set time. For our own
-  // agent (which ends the call itself) it is only a backstop.
+  // Clock tick + deadline. The browser is the only thing that can stop the vendor
+  // stream, so the session ends exactly at the server-set time.
   useEffect(() => {
     if (!endsAt || !live) return;
-    const graceMs = CLIENT_DRIVEN.has(live.launch.kind) ? 0 : AGENT_END_GRACE_S * 1000;
     const t = setInterval(() => {
       const ts = Date.now();
       setNow(ts);
-      if (ts >= endsAt + graceMs) void endNow("deadline");
+      if (ts >= endsAt) void endNow("deadline");
     }, 250);
     return () => clearInterval(t);
   }, [endsAt, live, endNow]);
@@ -130,7 +116,7 @@ export default function Interview() {
       });
       sessionStorage.removeItem(KEY_STORE);
       sessionRef.current = s.session_id;
-      setLive({ id: s.session_id, launch: s.launch, mode: s.mode, disclosure: s.disclosure });
+      setLive({ id: s.session_id, launch: s.launch, disclosure: s.disclosure });
       setPhase("connecting");
     } catch (e) {
       sessionStorage.removeItem(KEY_STORE);
@@ -189,7 +175,6 @@ export default function Interview() {
             <Stage
               sessionId={live.id}
               launch={live.launch}
-              mode={live.mode}
               onPhase={setPhase}
               onClock={setEndsAt}
               onNotice={setNotice}

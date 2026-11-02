@@ -5,15 +5,15 @@ same across vendors (auth, quota reservation and settlement, the practice clock,
 ending sessions, ratings, the scorecard) lives in app.py / quota.py and never
 branches on a vendor name.
 
-A provider answers four questions:
+A provider answers three questions:
   * launch(ctx)   -> what the browser needs to show the interview (a "launch" dict
-                     whose `kind` picks a frontend stage: "livekit", "iframe" or
-                     "elevenlabs")
+                     whose `kind` picks a frontend stage: "iframe" or "elevenlabs")
   * close(sess)   -> best-effort stop of anything still running at the vendor
-  * client_driven -> does the browser report "media ready" and heartbeats (true for
-                     embeds/hosted vendors), or does our own agent (LiveKit)?
   * stateful      -> does launching create something at the vendor that must be
-                     created exactly once per session (e.g. a Tavus conversation)?
+                     created exactly once per session?
+
+The browser reports the lifecycle (media ready, heartbeats) for every provider; the
+server enforces the deadline and settles credits.
 
 Adding a vendor = add a class (or reuse IframeEmbedProvider) + an entry in
 config/providers.json. Nothing else changes.
@@ -27,14 +27,14 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.parse import urlencode, urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
 import httpx
 
 log = logging.getLogger("interview_api.providers")
 
 DEFAULT_PROVIDERS_FILE = Path(__file__).resolve().parents[3] / "config" / "providers.json"
-INTEGRATIONS = ("livekit_agent", "iframe_embed", "tavus", "elevenlabs_agent")
+INTEGRATIONS = ("iframe_embed", "elevenlabs_agent")
 
 
 class ProviderError(Exception):
@@ -67,13 +67,10 @@ class ProviderSpec:
 @dataclass(frozen=True)
 class LaunchContext:
     session_id: str
-    room_name: str
     student_id: str
     student_name: str
     practice_seconds: int
     max_vendor_seconds: int  # vendor-side hard cap: startup + practice + closing grace
-    instructions: str  # full interviewer policy incl. confirmed facts (for hosted vendors)
-    opening_line: str
     # Short plain-text values for hosted agents that template their own prompt
     # (ElevenLabs {{variables}}). Built from confirmed facts only.
     dynamic_variables: dict[str, str] = field(default_factory=dict)
@@ -81,16 +78,15 @@ class LaunchContext:
 
 class InterviewProvider(Protocol):
     spec: ProviderSpec
-    client_driven: bool
     stateful: bool
-    transport: str  # "livekit" | "iframe" | "elevenlabs"
+    transport: str  # "iframe" | "elevenlabs"
 
     async def launch(self, ctx: LaunchContext) -> dict[str, Any]: ...
 
     async def close(self, sess: dict[str, Any]) -> bool: ...
 
     def session_providers(self) -> dict[str, Any]:
-        """Stored on the session row (and read by our agent for LiveKit sessions)."""
+        """Stored on the session row for reporting."""
         ...
 
 
@@ -109,43 +105,6 @@ def _origin(url: str) -> str:
     return f"{p.scheme}://{p.netloc}"
 
 
-# --------------------------------------------------------------------------- LiveKit
-
-
-class LiveKitAgentProvider:
-    """Our own pipeline: LiveKit room + interview agent (voice engine + avatar renderer
-    chosen by the agent from session_providers())."""
-
-    client_driven = False
-    stateful = False
-    transport = "livekit"
-
-    def __init__(self, spec: ProviderSpec, media: Any, voice_engine: str, grader: str):
-        self.spec, self.media, self.voice_engine, self.grader = spec, media, voice_engine, grader
-
-    def session_providers(self) -> dict[str, Any]:
-        return {
-            "provider_id": self.spec.id,
-            "integration": self.spec.integration,
-            "transport": self.transport,
-            "voice": self.voice_engine,
-            "avatar": self.spec.raw.get("avatar"),
-            "grader": self.grader,
-        }
-
-    async def launch(self, ctx: LaunchContext) -> dict[str, Any]:
-        server_url, token = self.media.mint_join_token(
-            room=ctx.room_name,
-            identity=f"student-{ctx.student_id}",
-            name=ctx.student_name,
-            session_id=ctx.session_id,
-        )
-        return {"kind": "livekit", "server_url": server_url, "participant_token": token}
-
-    async def close(self, sess: dict[str, Any]) -> bool:
-        return await self.media.delete_room(sess["room_name"])
-
-
 # --------------------------------------------------------------------------- iframe
 
 
@@ -160,7 +119,6 @@ class IframeEmbedProvider:
     only returned to signed-in students with a reserved session.
     """
 
-    client_driven = True
     stateful = False
     transport = "iframe"
 
@@ -176,12 +134,12 @@ class IframeEmbedProvider:
             "vendor": self.spec.vendor,
         }
 
-    def _launch(self, url: str) -> dict[str, Any]:
+    async def launch(self, ctx: LaunchContext) -> dict[str, Any]:
         r = self.spec.raw
         return {
             "kind": "iframe",
-            "url": url,
-            "origin": _origin(url),
+            "url": self.url,
+            "origin": _origin(self.url),
             "allow": r.get("allow", "microphone; autoplay"),
             "aspect_ratio": r.get("aspect_ratio", "16 / 9"),
             "clock_start": r.get("clock_start", "on_interaction"),
@@ -189,97 +147,8 @@ class IframeEmbedProvider:
             "title": "Practice interviewer",
         }
 
-    async def launch(self, ctx: LaunchContext) -> dict[str, Any]:
-        return self._launch(self.url)
-
     async def close(self, sess: dict[str, Any]) -> bool:
         return True  # nothing server-side to stop for a static embed
-
-
-# --------------------------------------------------------------------------- Tavus
-
-
-class TavusConversationProvider(IframeEmbedProvider):
-    """Tavus hosted conversation, created per session with the student's facts.
-
-    Field names follow docs.tavus.io create-conversation (checked 2026-11-02:
-    face_id / pal_id, conversational_context, custom_greeting, callback_url,
-    properties.max_call_duration ...). Not yet exercised against the live API.
-    """
-
-    stateful = True
-    API = "https://tavusapi.com/v2"
-
-    def __init__(
-        self,
-        spec: ProviderSpec,
-        *,
-        api_key: str,
-        face_id: str,
-        pal_id: str | None,
-        callback_url: str | None,
-        require_auth: bool,
-        http: httpx.AsyncClient | None = None,
-    ):
-        self.spec = spec
-        self.api_key, self.face_id, self.pal_id = api_key, face_id, pal_id
-        self.callback_url, self.require_auth = callback_url, require_auth
-        self.http = http or httpx.AsyncClient(timeout=20)
-
-    def session_providers(self) -> dict[str, Any]:
-        return {**super().session_providers(), "vendor": "tavus"}
-
-    async def launch(self, ctx: LaunchContext) -> dict[str, Any]:
-        body: dict[str, Any] = {
-            "face_id": self.face_id,
-            "conversation_name": f"ni-{ctx.session_id}",
-            # Appended to the PAL's own context: our policy + confirmed facts, so the
-            # Tavus interviewer is grounded the same way as our own pipeline.
-            "conversational_context": ctx.instructions,
-            "custom_greeting": ctx.opening_line,
-            "properties": {
-                "max_call_duration": ctx.max_vendor_seconds,
-                "participant_left_timeout": 10,
-                "participant_absent_timeout": 60,
-            },
-        }
-        if self.pal_id:
-            body["pal_id"] = self.pal_id
-        if self.callback_url:
-            body["callback_url"] = self.callback_url
-        if self.require_auth:
-            body["require_auth"] = True
-        try:
-            r = await self.http.post(
-                f"{self.API}/conversations", headers={"x-api-key": self.api_key}, json=body
-            )
-        except httpx.HTTPError as e:
-            raise ProviderError(f"tavus unreachable: {e!r}") from e
-        if r.status_code >= 400:
-            raise ProviderError(f"tavus {r.status_code}: {r.text[:300]}")
-        data = r.json()
-        url = data.get("conversation_url")
-        if not url:
-            raise ProviderError("tavus returned no conversation_url")
-        _checked_url(url, self.spec.raw.get("allowed_hosts", []))
-        if data.get("meeting_token"):
-            parts = urlsplit(url)
-            q = (parts.query + "&" if parts.query else "") + urlencode({"t": data["meeting_token"]})
-            url = urlunsplit(parts._replace(query=q))
-        return {**self._launch(url), "vendor_ref": data.get("conversation_id")}
-
-    async def close(self, sess: dict[str, Any]) -> bool:
-        ref = sess.get("vendor_ref")
-        if not ref:
-            return True
-        try:
-            r = await self.http.post(
-                f"{self.API}/conversations/{ref}/end", headers={"x-api-key": self.api_key}
-            )
-            return r.status_code < 400 or r.status_code == 404
-        except httpx.HTTPError:
-            log.warning("tavus end failed for %s; max_call_duration is the backstop", ref)
-            return False
 
 
 # --------------------------------------------------------------------------- ElevenLabs
@@ -294,12 +163,10 @@ class ElevenLabsAgentProvider:
     browser gets only the agent id, which anyone could also use, so this is allowed
     only when ELEVENLABS_ALLOW_PUBLIC_AGENT=true (local testing).
 
-    The browser reports media-ready and heartbeats (client_driven). Nothing can be
-    stopped from our server: the call ends when the browser disconnects, and the
-    agent's own max-duration setting is the backstop.
+    Nothing can be stopped from our server: the call ends when the browser
+    disconnects, and the agent's own max-duration setting is the backstop.
     """
 
-    client_driven = True
     stateful = False
     transport = "elevenlabs"
     API = "https://api.elevenlabs.io/v1"
@@ -370,9 +237,6 @@ class ProviderRegistry:
     def enabled(self) -> list[InterviewProvider]:
         return [self.providers[i] for i in self.order if i in self.providers]
 
-    def default_for(self, modality: str) -> InterviewProvider | None:
-        return next((p for p in self.enabled() if p.spec.modality == modality), None)
-
     def frame_origins(self) -> list[str]:
         """Origins the web app must allow microphone/autoplay for (Permissions-Policy)."""
         out = []
@@ -385,7 +249,6 @@ class ProviderRegistry:
 
 def load_registry(
     settings: Any,
-    media: Any,
     *,
     env: dict[str, str] | None = None,
     path: str | Path | None = None,
@@ -425,16 +288,9 @@ def load_registry(
             raw=raw,
         )
         try:
-            if raw["integration"] == "livekit_agent":
-                if media is None:
-                    disabled[pid] = "LiveKit not configured"
-                    continue
-                prov: InterviewProvider = LiveKitAgentProvider(
-                    spec, media, settings.voice_engine, settings.grader
-                )
-            elif raw["integration"] == "iframe_embed":
-                prov = IframeEmbedProvider(spec, env[raw["url_env"]])
-            elif raw["integration"] == "elevenlabs_agent":
+            if raw["integration"] == "iframe_embed":
+                prov: InterviewProvider = IframeEmbedProvider(spec, env[raw["url_env"]])
+            else:  # elevenlabs_agent
                 key = env.get("ELEVENLABS_API_KEY") or None
                 public_ok = env.get("ELEVENLABS_ALLOW_PUBLIC_AGENT", "").lower() in ("1", "true")
                 if not key and not public_ok:
@@ -448,19 +304,6 @@ def load_registry(
                     agent_id=env["ELEVENLABS_AGENT_ID"],
                     api_key=key,
                     branch_id=env.get("ELEVENLABS_BRANCH_ID") or None,
-                    http=http,
-                )
-            else:  # tavus
-                secret = env.get("TAVUS_WEBHOOK_SECRET", "")
-                base = env.get("PUBLIC_BASE_URL", "").rstrip("/")
-                callback = f"{base}/api/webhooks/tavus/{secret}" if base and secret else None
-                prov = TavusConversationProvider(
-                    spec,
-                    api_key=env["TAVUS_API_KEY"],
-                    face_id=env["TAVUS_FACE_ID"],
-                    pal_id=env.get("TAVUS_PAL_ID") or None,
-                    callback_url=callback,
-                    require_auth=env.get("TAVUS_REQUIRE_AUTH", "").lower() in ("1", "true"),
                     http=http,
                 )
         except ValueError as e:

@@ -93,7 +93,7 @@ export default function SessionPage() {
 
   const { session, turns, feedback, provider } = data;
   const report = feedback?.report;
-  // Hosted vendors (e.g. Tavus) send text without timings; don't show fake 0:00 stamps.
+  // Some vendor transcripts arrive without timings; don't show fake 0:00 stamps.
   const timed = turns.some((t) => t.start_ms > 0);
   const ended = session.status !== "created" && session.status !== "active";
   return (

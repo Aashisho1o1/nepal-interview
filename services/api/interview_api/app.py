@@ -1,17 +1,14 @@
-"""Session API. Browser endpoints under /api (cookie auth); agent endpoints under
-/internal (bearer service token, never proxied to the browser)."""
+"""Session API: browser endpoints under /api (cookie auth, same-origin via the Next.js
+proxy). Vendor keys never leave this process."""
 
 import asyncio
-import hmac
 import json
 import logging
-import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from typing import Any, Literal
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field
@@ -20,7 +17,6 @@ from interview_core import POLICY_VERSION
 from interview_core.dynamic_vars import build_dynamic_variables
 from interview_core.facts import Fact, build_snapshot, missing_required
 from interview_core.funding import FundingInputError, compute_funding
-from interview_core.policy import DefaultPolicy
 from interview_core.pricing import load_price_table
 from interview_core.tracks import TRACKS, get_track
 
@@ -30,16 +26,14 @@ from .auth import (
     check_origin,
     create_login,
     current_student,
-    require_internal,
     token_hash,
     verify_password,
 )
 from .config import Settings, get_settings
 from .db import apply_schema, audit, make_pool
-from .feedback import grade_session
 from .providers import LaunchContext, ProviderError, load_registry
 from .quota import QuotaError, balances, settle_session, start_session
-from .reconcile import close_room
+from .reconcile import close_vendor
 
 log = logging.getLogger("interview_api")
 
@@ -50,7 +44,6 @@ class Strict(BaseModel):
 
 def create_app(
     settings: Settings | None = None,
-    media=None,
     pool=None,
     *,
     provider_env: dict[str, str] | None = None,
@@ -63,33 +56,15 @@ def create_app(
         app.state.pool = pool or make_pool(s.database_url)
         await app.state.pool.open()
         await apply_schema(app.state.pool)
-        if app.state.media is None:
-            from .media import FakeMedia, LiveKitMedia
-
-            if s.media_backend == "fake":
-                log.warning("MEDIA_BACKEND=fake: join tokens are not usable; UI testing only")
-                app.state.media = FakeMedia()
-            else:
-                try:
-                    app.state.media = LiveKitMedia(s)
-                except RuntimeError as e:
-                    # Embed/hosted providers still work without LiveKit.
-                    log.warning("LiveKit providers disabled: %s", e)
-        app.state.providers = load_registry(
-            s, app.state.media, env=provider_env, http=provider_http
-        )
-        env = os.environ if provider_env is None else provider_env
-        app.state.tavus_webhook_secret = env.get("TAVUS_WEBHOOK_SECRET", "")
+        app.state.providers = load_registry(s, env=provider_env, http=provider_http)
         yield
         if pool is None:
             await app.state.pool.close()
 
     app = FastAPI(title="Nepal interview session API", lifespan=lifespan)
     app.state.settings = s
-    app.state.media = media
     app.state.prices = load_price_table(s.price_table_path)
     app.state.limiter = LoginLimiter()
-    app.state.policy = DefaultPolicy()
 
     @app.exception_handler(QuotaError)
     async def _quota_err(_req, e: QuotaError):
@@ -289,26 +264,19 @@ def create_app(
     class StartBody(Strict):
         track: str
         format_id: str
-        # Pick a provider explicitly (testing), or let the server choose by modality.
-        provider_id: str | None = Field(default=None, max_length=64)
-        mode: Literal["avatar", "voice"] | None = None
+        provider_id: str = Field(max_length=64)
 
     @app.post("/api/sessions", dependencies=[Depends(origin_guard)])
     async def start(body: StartBody, request: Request, st=Depends(current_student)):
         if not s.sessions_enabled:
             raise HTTPException(503, "Practice sessions are paused.")
         reg = app.state.providers
-        if body.provider_id:
-            try:
-                prov = reg.get(body.provider_id)
-            except KeyError as e:
-                raise QuotaError(
-                    422, "provider_not_available", "That interviewer is not available."
-                ) from e
-        else:
-            prov = reg.default_for(body.mode or "avatar")
-            if prov is None:
-                raise QuotaError(503, "provider_not_available", "No interviewer is available.")
+        try:
+            prov = reg.get(body.provider_id)
+        except KeyError as e:
+            raise QuotaError(
+                422, "provider_not_available", "That interviewer is not available."
+            ) from e
         mode = prov.spec.modality
         if mode == "avatar" and not s.avatar_enabled:
             raise QuotaError(
@@ -359,23 +327,18 @@ def create_app(
             raise QuotaError(
                 409, "session_ended", "That session has already ended.", session_id=str(sess["id"])
             )
-        funding = compute_funding(facts)
-        bundle = app.state.policy.build(track, fmt, facts, funding)
         startup = s.startup_budget_avatar_s if mode == "avatar" else s.startup_budget_voice_s
         ctx = LaunchContext(
             session_id=str(sess["id"]),
-            room_name=sess["room_name"],
             student_id=str(st["student_id"]),
             student_name=st["display_name"],
             practice_seconds=sess["practice_seconds"],
             max_vendor_seconds=startup + sess["practice_seconds"] + s.closing_grace_s,
-            instructions=bundle.instructions,
-            opening_line=bundle.opening_line,
             dynamic_variables=build_dynamic_variables(
                 session_id=str(sess["id"]),
                 student_name=st["display_name"],
                 facts=facts,
-                funding=funding,
+                funding=compute_funding(facts),
                 practice_seconds=sess["practice_seconds"],
             ),
         )
@@ -391,9 +354,6 @@ def create_app(
             "hard_deadline_at": sess["hard_deadline_at"].isoformat(),
             "disclosure": fmt.disclosure,
         }
-        if launch["kind"] == "livekit":  # kept for older clients
-            out["server_url"] = launch["server_url"]
-            out["participant_token"] = launch["participant_token"]
         return out
 
     async def _launch_once(prov, sess, ctx: LaunchContext) -> dict:
@@ -438,8 +398,8 @@ def create_app(
             )
         return launch
 
-    async def _close_media(sess) -> None:
-        await close_room(app.state.pool, app.state.media, sess, app.state.providers)
+    async def _close_vendor(sess) -> None:
+        await close_vendor(app.state.pool, sess, app.state.providers)
 
     async def _own_session(conn, session_id: str, student_id):
         try:
@@ -512,7 +472,7 @@ def create_app(
         async with app.state.pool.connection() as conn:
             sess = await _own_session(conn, session_id, st["student_id"])
         out = await settle_session(app.state.pool, s, sess["id"], reason)
-        await _close_media(sess)
+        await _close_vendor(sess)
         return _public(out)
 
     @app.get("/api/sessions/{session_id}/feedback")
@@ -556,8 +516,7 @@ def create_app(
 
     # ------------------------------------------------------------------ shared session events
     async def _apply_event(conn, sess, kind: str, payload: dict, source: str):
-        """One code path for lifecycle events, whether reported by our agent (LiveKit
-        sessions) or by the student's browser (embedded/hosted providers)."""
+        """Lifecycle events reported by the student's browser (and settlement by the API)."""
         await conn.execute(
             "INSERT INTO session_events (session_id, kind, payload, source) VALUES (%s,%s,%s,%s)",
             (sess["id"], kind, Jsonb(payload), source),
@@ -589,12 +548,6 @@ def create_app(
             await conn.execute(
                 "UPDATE interview_sessions SET last_heartbeat_at=now() WHERE id=%s", (sess["id"],)
             )
-        elif kind == "room_deleted":
-            await conn.execute(
-                "UPDATE interview_sessions SET room_closed_at=COALESCE(room_closed_at, now()) "
-                "WHERE id=%s",
-                (sess["id"],),
-            )
         return sess
 
     def _event_reply(sess) -> dict:
@@ -612,9 +565,8 @@ def create_app(
 
     @app.post("/api/sessions/{session_id}/client-events", dependencies=[Depends(origin_guard)])
     async def client_event(session_id: str, body: ClientEventBody, st=Depends(current_student)):
-        """Browser-reported lifecycle for providers we cannot observe server-side
-        (embeds, hosted vendors). For our own LiveKit sessions the agent is the source
-        of truth, so the browser may only send metrics."""
+        """Browser-reported lifecycle: the practice clock starts on the first
+        media_ready, heartbeats keep the session live, metrics are stored for review."""
         if len(json.dumps(body.payload)) > 4000:
             raise HTTPException(413, "payload too large")
         async with app.state.pool.connection() as conn, conn.transaction():
@@ -623,9 +575,6 @@ def create_app(
                 "SELECT * FROM interview_sessions WHERE id=%s FOR UPDATE", (session_id,)
             )
             sess = await cur.fetchone()
-            client_driven = sess["providers"].get("transport") != "livekit"
-            if body.kind in ("media_ready", "heartbeat") and not client_driven:
-                raise HTTPException(409, "this session's lifecycle is reported by the agent")
             sess = await _apply_event(conn, sess, body.kind, body.payload, "client")
         return _event_reply(sess)
 
@@ -659,235 +608,6 @@ def create_app(
                 ),
             )
         return {"ok": True}
-
-    # ------------------------------------------------------------------ vendor webhooks
-    @app.post("/api/webhooks/tavus/{secret}")
-    async def tavus_webhook(secret: str, request: Request, background: BackgroundTasks):
-        """Tavus conversation callbacks. Authenticated by a secret in the callback URL
-        (set TAVUS_WEBHOOK_SECRET and PUBLIC_BASE_URL)."""
-        expected = app.state.tavus_webhook_secret
-        if not expected or not hmac.compare_digest(secret, expected):
-            raise HTTPException(404, "not found")
-        try:
-            data = json.loads(await request.body())
-        except ValueError as e:
-            raise HTTPException(400, "invalid json") from e
-        ref = str(data.get("conversation_id") or "")
-        event = str(data.get("event_type") or data.get("message_type") or "unknown")[:80]
-        async with app.state.pool.connection() as conn:
-            cur = await conn.execute(
-                "SELECT * FROM interview_sessions WHERE vendor_ref=%s AND provider_id=%s",
-                (ref, "tavus_conversation"),
-            )
-            sess = await cur.fetchone()
-            if not sess:
-                return {"ok": True, "ignored": "unknown conversation"}
-            props = data.get("properties") or {}
-            await conn.execute(
-                "INSERT INTO session_events (session_id, kind, payload, source) "
-                "VALUES (%s,%s,%s,'tavus')",
-                (sess["id"], "vendor_event", Jsonb({"event_type": event})),
-            )
-            if event == "application.transcription_ready":
-                seq = 0
-                for msg in props.get("transcript") or []:
-                    role = msg.get("role")
-                    text = str(msg.get("content") or "").strip()
-                    if role not in ("user", "assistant") or not text:
-                        continue
-                    seq += 1
-                    await conn.execute(
-                        """INSERT INTO interview_turns (session_id, turn_id, sequence, speaker,
-                             text, start_ms, end_ms, canceled) VALUES (%s,%s,%s,%s,%s,0,0,false)
-                           ON CONFLICT (session_id, turn_id) DO UPDATE SET text=EXCLUDED.text""",
-                        (
-                            sess["id"],
-                            f"tavus-{seq}",
-                            seq,
-                            "student" if role == "user" else "interviewer",
-                            text[:8000],
-                        ),
-                    )
-        if event == "system.shutdown":
-            await settle_session(app.state.pool, s, sess["id"], "provider_shutdown")
-        if event == "application.transcription_ready":
-            async with app.state.pool.connection() as conn:
-                cur = await conn.execute(
-                    "SELECT status FROM interview_sessions WHERE id=%s", (sess["id"],)
-                )
-                status = (await cur.fetchone())["status"]
-            if status == "completed":
-                background.add_task(grade_session, app.state.pool, s, sess["id"])
-        return {"ok": True}
-
-    # ------------------------------------------------------------------ internal (agent)
-    internal = [Depends(require_internal)]
-
-    async def _session_any(conn, session_id: str):
-        cur = await conn.execute("SELECT * FROM interview_sessions WHERE id=%s", (session_id,))
-        sess = await cur.fetchone()
-        if not sess:
-            raise HTTPException(404, "session not found")
-        return sess
-
-    @app.get("/internal/sessions/{session_id}/config", dependencies=internal)
-    async def agent_config(session_id: str):
-        async with app.state.pool.connection() as conn:
-            sess = await _session_any(conn, session_id)
-            cur = await conn.execute(
-                "SELECT * FROM profile_snapshots WHERE id=%s", (sess["snapshot_id"],)
-            )
-            snap = await cur.fetchone()
-        if sess["status"] not in ("created", "active"):
-            raise HTTPException(410, "session is not live")
-        track = get_track(sess["track"])
-        fmt = track.format(sess["format_id"])
-        facts = snap["confirmed_facts_json"]
-        bundle = app.state.policy.build(track, fmt, facts, compute_funding(facts))
-        startup = (
-            s.startup_budget_avatar_s if sess["mode"] == "avatar" else s.startup_budget_voice_s
-        )
-        return {
-            "session_id": str(sess["id"]),
-            "room_name": sess["room_name"],
-            "student_identity": f"student-{sess['student_id']}",
-            "track": sess["track"],
-            "mode": sess["mode"],
-            "providers": sess["providers"],
-            "practice_seconds": sess["practice_seconds"],
-            "startup_budget_s": startup,
-            "closing_grace_s": s.closing_grace_s,
-            "hard_deadline_at": sess["hard_deadline_at"].timestamp(),
-            "policy": bundle.to_dict(),
-        }
-
-    class EventBody(Strict):
-        kind: Literal[
-            "agent_joined",
-            "media_ready",
-            "fallback_to_voice",
-            "heartbeat",
-            "latency",
-            "interruption",
-            "state",
-            "error",
-            "room_deleted",
-            "provider_closed",
-        ]
-        payload: dict = Field(default_factory=dict)
-
-    @app.post("/internal/sessions/{session_id}/events", dependencies=internal)
-    async def agent_event(session_id: str, body: EventBody):
-        async with app.state.pool.connection() as conn, conn.transaction():
-            cur = await conn.execute(
-                "SELECT * FROM interview_sessions WHERE id=%s FOR UPDATE", (session_id,)
-            )
-            sess = await cur.fetchone()
-            if not sess:
-                raise HTTPException(404, "session not found")
-            sess = await _apply_event(conn, sess, body.kind, body.payload, "agent")
-        return _event_reply(sess)
-
-    class TurnIn(Strict):
-        turn_id: str = Field(max_length=80)
-        sequence: int
-        speaker: Literal["student", "interviewer"]
-        text: str = Field(max_length=8000)
-        start_ms: int = Field(ge=0)
-        end_ms: int = Field(ge=0)
-        canceled: bool = False
-        metrics: dict = Field(default_factory=dict)
-
-    class TurnsBody(Strict):
-        turns: list[TurnIn] = Field(max_length=200)
-
-    @app.post("/internal/sessions/{session_id}/turns", dependencies=internal)
-    async def agent_turns(session_id: str, body: TurnsBody):
-        async with app.state.pool.connection() as conn, conn.transaction():
-            await _session_any(conn, session_id)
-            for t in body.turns:
-                await conn.execute(
-                    """INSERT INTO interview_turns (session_id, turn_id, sequence, speaker, text,
-                         start_ms, end_ms, canceled, metrics) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                       ON CONFLICT (session_id, turn_id) DO UPDATE SET text=EXCLUDED.text,
-                         end_ms=EXCLUDED.end_ms, canceled=EXCLUDED.canceled, metrics=EXCLUDED.metrics""",
-                    (
-                        session_id,
-                        t.turn_id,
-                        t.sequence,
-                        t.speaker,
-                        t.text,
-                        t.start_ms,
-                        max(t.end_ms, t.start_ms),
-                        t.canceled,
-                        Jsonb(t.metrics),
-                    ),
-                )
-        return {"stored": len(body.turns)}
-
-    class UsageIn(Strict):
-        provider_event_id: str = Field(max_length=200)
-        provider: str = Field(max_length=40)
-        meter: str = Field(max_length=120)
-        quantity: Decimal = Field(ge=0)
-        unit: str = Field(max_length=20)
-        # Cumulative meters are re-sent with the running total (e.g. every heartbeat) so a
-        # crash loses little; the stored quantity only ever increases.
-        cumulative: bool = False
-
-    class UsageBody(Strict):
-        events: list[UsageIn] = Field(max_length=100)
-
-    @app.post("/internal/sessions/{session_id}/usage", dependencies=internal)
-    async def agent_usage(session_id: str, body: UsageBody):
-        prices = app.state.prices
-        inserted = 0
-        async with app.state.pool.connection() as conn, conn.transaction():
-            await _session_any(conn, session_id)
-            for u in body.events:
-                cost = prices.cost_usd_micros(u.meter, u.quantity)
-                conflict = (
-                    "DO UPDATE SET quantity=EXCLUDED.quantity, cost_usd_micros=EXCLUDED.cost_usd_micros, "
-                    "price_version=EXCLUDED.price_version WHERE usage_ledger.quantity < EXCLUDED.quantity"
-                    if u.cumulative
-                    else "DO NOTHING"
-                )
-                cur = await conn.execute(
-                    "INSERT INTO usage_ledger (session_id, provider_event_id, provider, meter, "
-                    "quantity, unit, cost_usd_micros, price_version) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
-                    f"ON CONFLICT (session_id, provider_event_id) {conflict} RETURNING id",
-                    (
-                        session_id,
-                        u.provider_event_id,
-                        u.provider,
-                        u.meter,
-                        u.quantity,
-                        u.unit,
-                        cost,
-                        prices.version if cost is not None else None,
-                    ),
-                )
-                inserted += 1 if await cur.fetchone() else 0
-        return {"inserted": inserted, "duplicates": len(body.events) - inserted}
-
-    class FinalizeBody(Strict):
-        reason: str = Field(max_length=60)
-
-    @app.post("/internal/sessions/{session_id}/finalize", dependencies=internal)
-    async def agent_finalize(session_id: str, body: FinalizeBody):
-        out = await settle_session(app.state.pool, s, session_id, body.reason)
-        return {**_public(out), "already_settled": out["already_settled"]}
-
-    @app.post("/internal/sessions/{session_id}/transcript-complete", dependencies=internal)
-    async def transcript_complete(session_id: str, background: BackgroundTasks):
-        async with app.state.pool.connection() as conn:
-            sess = await _session_any(conn, session_id)
-        if sess["status"] in ("created", "active"):
-            raise HTTPException(409, "settle the session first")
-        if sess["status"] == "failed":
-            return {"status": "skipped", "reason": "session never started"}
-        background.add_task(grade_session, app.state.pool, s, sess["id"])
-        return {"status": "queued"}
 
     @app.get("/healthz")
     async def healthz():

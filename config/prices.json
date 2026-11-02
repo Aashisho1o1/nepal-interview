@@ -1,15 +1,9 @@
 {
-  "version": "prices-2026-11-01-planning",
-  "note": "Planning snapshot only. Simli and LiveKit figures come from the public pages cited in the handoff (S13, S14), checked 2026-11-01, and are marginal per-unit rates that exclude subscription minimums. OpenAI realtime token prices are intentionally null: fill them from the current pricing page or invoice before quoting a cost. Replace every figure with invoice-derived rates before setting paid allowances.",
-  "fx": {"npr_per_usd": "160", "as_of": "planning-assumption", "note": "Handoff planning rate, not a market quote."},
+  "version": "prices-2026-11-02-unpriced",
+  "note": "Vendor usage is recorded per session as metered; cost is derived from this table so historical rows keep the price that applied. Every meter is deliberately unpriced until a figure comes from the vendor's invoice or plan page, with the date recorded here. Never guess a rate.",
+  "fx": {"npr_per_usd": "160", "as_of": "planning-assumption", "note": "Planning rate for reporting, not a market quote."},
   "meters": {
-    "livekit.agent_session_seconds": {"usd_per_unit": "0.000166667", "unit": "second", "source": "LiveKit Ship overage USD 0.01/min (S14)", "verified": false},
-    "simli.avatar_seconds": {"usd_per_unit": "0.000166667", "unit": "second", "source": "Simli Hobby USD 10 / 1,000 min (S13)", "verified": false},
-    "openai.gpt-realtime.input_audio_tokens": {"usd_per_unit": null, "unit": "token", "source": "fill from current OpenAI pricing", "verified": false},
-    "openai.gpt-realtime.input_cached_audio_tokens": {"usd_per_unit": null, "unit": "token", "source": "fill from current OpenAI pricing", "verified": false},
-    "openai.gpt-realtime.input_text_tokens": {"usd_per_unit": null, "unit": "token", "source": "fill from current OpenAI pricing", "verified": false},
-    "openai.gpt-realtime.input_cached_text_tokens": {"usd_per_unit": null, "unit": "token", "source": "fill from current OpenAI pricing", "verified": false},
-    "openai.gpt-realtime.output_audio_tokens": {"usd_per_unit": null, "unit": "token", "source": "fill from current OpenAI pricing", "verified": false},
-    "openai.gpt-realtime.output_text_tokens": {"usd_per_unit": null, "unit": "token", "source": "fill from current OpenAI pricing", "verified": false}
+    "elevenlabs.agent_seconds": {"usd_per_unit": null, "unit": "second", "source": "ElevenLabs plan page / invoice: agent minutes", "verified": false},
+    "liveavatar.session_seconds": {"usd_per_unit": null, "unit": "second", "source": "HeyGen LiveAvatar: 1 credit per session minute; credit price from plan", "verified": false}
   }
 }

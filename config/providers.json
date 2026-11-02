@@ -24,31 +24,6 @@
       }
     },
     {
-      "id": "tavus_conversation",
-      "label": "Video interviewer B",
-      "vendor": "Tavus (hosted conversation)",
-      "integration": "tavus",
-      "modality": "avatar",
-      "enabled": false,
-      "requires_env": [
-        "TAVUS_API_KEY",
-        "TAVUS_FACE_ID"
-      ],
-      "allowed_hosts": [
-        "tavus.daily.co"
-      ],
-      "allow": "camera; microphone; autoplay; fullscreen",
-      "aspect_ratio": "16 / 9",
-      "clock_start": "on_interaction",
-      "clock_fallback_ms": 20000,
-      "data_note": "Video stream. Your voice and confirmed facts go to Tavus.",
-      "capabilities": {
-        "transcripts": true,
-        "student_facts": true,
-        "server_can_end": true
-      }
-    },
-    {
       "id": "elevenlabs_voice",
       "label": "Voice only",
       "vendor": "ElevenLabs Agents",

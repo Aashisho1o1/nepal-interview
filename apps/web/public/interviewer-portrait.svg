@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Fictional interviewer (illustration)">
-  <rect width="400" height="400" fill="#24313b"/>
-  <circle cx="200" cy="160" r="70" fill="#8fa3b3"/>
-  <path d="M70 400c10-90 70-140 130-140s120 50 130 140z" fill="#8fa3b3"/>
-  <text x="200" y="380" fill="#cfd8df" font-family="system-ui,sans-serif" font-size="16" text-anchor="middle">Fictional practice interviewer</text>
-</svg>

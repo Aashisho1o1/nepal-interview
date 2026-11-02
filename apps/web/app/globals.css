@@ -69,11 +69,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
 td { padding: 8px 0; border-top: 1px solid var(--line); vertical-align: top; }
 td:last-child { text-align: right; white-space: nowrap; padding-left: 12px; }
-.stage {
-  position: relative; background: var(--stage); border-radius: var(--radius); overflow: hidden;
-  aspect-ratio: 1 / 1; max-height: 62vh; width: 100%; display: grid; place-items: center;
-}
-.stage video, .stage img { width: 100%; height: 100%; object-fit: cover; }
 /* Overlays sit on top of any provider's stage; pointer-events: none so they never
    block a vendor embed's own buttons underneath. */
 .stage-wrap { position: relative; width: 100%; }

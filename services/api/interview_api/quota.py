@@ -98,7 +98,7 @@ async def start_session(
     snapshot_id,
     providers: dict,
     policy_version: str,
-    provider_id: str = "livekit_voice",
+    provider_id: str,
 ) -> StartResult:
     if not (8 <= len(idempotency_key) <= 128):
         raise QuotaError(400, "bad_idempotency_key", "Idempotency-Key must be 8-128 characters")

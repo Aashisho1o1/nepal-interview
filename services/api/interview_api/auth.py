@@ -93,10 +93,3 @@ async def current_student(request: Request) -> dict:
     if row["student_id"] is None:
         raise HTTPException(403, "no student profile")
     return row
-
-
-def require_internal(request: Request) -> None:
-    expected = request.app.state.settings.internal_api_token
-    got = request.headers.get("authorization", "")
-    if not expected or not hmac.compare_digest(got, f"Bearer {expected}"):
-        raise HTTPException(401, "internal token required")
