@@ -6,7 +6,7 @@
 //
 // To add a vendor that hands you an iframe URL (LiveAvatar embed, Tavus, D-ID...) you
 // change nothing here: it is kind "iframe". A vendor with its own JS SDK (e.g.
-// ElevenLabs Agents) gets a new kind + one new stage component.
+// ElevenLabs Agents) gets a new kind + one new stage component (see ElevenLabsStage).
 
 export type ProviderInfo = {
   id: string;
@@ -35,7 +35,17 @@ export type IframeLaunch = {
   title: string;
 };
 
-export type Launch = LiveKitLaunch | IframeLaunch;
+// ElevenLabs agent, run in the browser with the ElevenLabs SDK. Private agents get a
+// short-lived conversation token from our server; a public test agent gets only its id.
+export type ElevenLabsLaunch = {
+  kind: "elevenlabs";
+  connection_type: "webrtc";
+  conversation_token?: string;
+  agent_id?: string;
+  dynamic_variables: Record<string, string>;
+};
+
+export type Launch = LiveKitLaunch | IframeLaunch | ElevenLabsLaunch;
 
 export type StartResp = {
   session_id: string;

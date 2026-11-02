@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import httpx
 import psycopg
@@ -15,6 +16,10 @@ from interview_api.seed import seed
 TEST_DSN = os.getenv("TEST_DATABASE_URL", "postgresql://postgres@/ni_test?host=/var/tmp&port=5433")
 ORIGIN = "http://test"
 ITOK = "internal-test-token"
+# Platform tests (quota, settlement, reconciler, Tavus/embed adapters) run against the
+# previous provider set, which still includes our own LiveKit pipeline. The student-facing
+# config/providers.json only offers ElevenLabs + LiveAvatar (see test_elevenlabs.py).
+LEGACY_PROVIDERS = str(Path(__file__).parent / "fixtures" / "providers.legacy.json")
 
 
 def settings(**kw) -> Settings:
@@ -24,6 +29,7 @@ def settings(**kw) -> Settings:
         internal_api_token=ITOK,
         allowed_origins=(ORIGIN,),
         max_starts_per_10min=50,
+        providers_file=LEGACY_PROVIDERS,
     )
     base.update(kw)
     return Settings(**base)

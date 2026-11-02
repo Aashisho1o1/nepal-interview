@@ -1,5 +1,5 @@
 {
-  "_comment": "Interview providers available for testing. No secrets here: URLs and keys come from the env vars named below. A provider is offered to students only when enabled is true AND its required env vars are set. Order = order shown to students.",
+  "_comment": "Interview providers offered to students. No secrets here: URLs and keys come from the env vars named below. A provider is offered only when enabled is true AND its required env vars are set. Order = order shown to students. This phase: ElevenLabs (voice) + HeyGen LiveAvatar (video) only; see docs/ELEVENLABS_LIVEAVATAR_FOCUS.md.",
   "providers": [
     {
       "id": "liveavatar_embed",
@@ -9,13 +9,19 @@
       "modality": "avatar",
       "enabled": true,
       "url_env": "LIVEAVATAR_EMBED_URL",
-      "allowed_hosts": ["embed.liveavatar.com"],
+      "allowed_hosts": [
+        "embed.liveavatar.com"
+      ],
       "allow": "microphone; autoplay",
       "aspect_ratio": "16 / 9",
       "clock_start": "on_interaction",
       "clock_fallback_ms": 20000,
       "data_note": "Video stream. Your voice goes to HeyGen LiveAvatar.",
-      "capabilities": {"transcripts": false, "student_facts": false, "server_can_end": false}
+      "capabilities": {
+        "transcripts": false,
+        "student_facts": false,
+        "server_can_end": false
+      }
     },
     {
       "id": "tavus_conversation",
@@ -23,37 +29,42 @@
       "vendor": "Tavus (hosted conversation)",
       "integration": "tavus",
       "modality": "avatar",
-      "enabled": true,
-      "requires_env": ["TAVUS_API_KEY", "TAVUS_FACE_ID"],
-      "allowed_hosts": ["tavus.daily.co"],
+      "enabled": false,
+      "requires_env": [
+        "TAVUS_API_KEY",
+        "TAVUS_FACE_ID"
+      ],
+      "allowed_hosts": [
+        "tavus.daily.co"
+      ],
       "allow": "camera; microphone; autoplay; fullscreen",
       "aspect_ratio": "16 / 9",
       "clock_start": "on_interaction",
       "clock_fallback_ms": 20000,
       "data_note": "Video stream. Your voice and confirmed facts go to Tavus.",
-      "capabilities": {"transcripts": true, "student_facts": true, "server_can_end": true}
+      "capabilities": {
+        "transcripts": true,
+        "student_facts": true,
+        "server_can_end": true
+      }
     },
     {
-      "id": "livekit_simli",
-      "label": "Video interviewer C",
-      "vendor": "Own pipeline: LiveKit + OpenAI Realtime + Simli",
-      "integration": "livekit_agent",
-      "modality": "avatar",
-      "enabled": true,
-      "avatar": "simli",
-      "data_note": "Video stream. Your voice goes to OpenAI via LiveKit; the interviewer's speech goes to Simli.",
-      "capabilities": {"transcripts": true, "student_facts": true, "server_can_end": true}
-    },
-    {
-      "id": "livekit_voice",
+      "id": "elevenlabs_voice",
       "label": "Voice only",
-      "vendor": "Own pipeline: LiveKit + OpenAI Realtime",
-      "integration": "livekit_agent",
+      "vendor": "ElevenLabs Agents",
+      "integration": "elevenlabs_agent",
       "modality": "voice",
       "enabled": true,
-      "avatar": null,
-      "data_note": "Audio only, lower data use. Your voice goes to OpenAI via LiveKit.",
-      "capabilities": {"transcripts": true, "student_facts": true, "server_can_end": true}
+      "requires_env": [
+        "ELEVENLABS_AGENT_ID"
+      ],
+      "format_id": "interview_5m",
+      "data_note": "Audio only, lower data use. Your voice and confirmed facts go to ElevenLabs.",
+      "capabilities": {
+        "transcripts": false,
+        "student_facts": true,
+        "server_can_end": false
+      }
     }
   ]
 }

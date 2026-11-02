@@ -7,7 +7,8 @@ branches on a vendor name.
 
 A provider answers four questions:
   * launch(ctx)   -> what the browser needs to show the interview (a "launch" dict
-                     whose `kind` picks a frontend stage: "livekit" or "iframe")
+                     whose `kind` picks a frontend stage: "livekit", "iframe" or
+                     "elevenlabs")
   * close(sess)   -> best-effort stop of anything still running at the vendor
   * client_driven -> does the browser report "media ready" and heartbeats (true for
                      embeds/hosted vendors), or does our own agent (LiveKit)?
@@ -33,7 +34,7 @@ import httpx
 log = logging.getLogger("interview_api.providers")
 
 DEFAULT_PROVIDERS_FILE = Path(__file__).resolve().parents[3] / "config" / "providers.json"
-INTEGRATIONS = ("livekit_agent", "iframe_embed", "tavus")
+INTEGRATIONS = ("livekit_agent", "iframe_embed", "tavus", "elevenlabs_agent")
 
 
 class ProviderError(Exception):
@@ -73,13 +74,16 @@ class LaunchContext:
     max_vendor_seconds: int  # vendor-side hard cap: startup + practice + closing grace
     instructions: str  # full interviewer policy incl. confirmed facts (for hosted vendors)
     opening_line: str
+    # Short plain-text values for hosted agents that template their own prompt
+    # (ElevenLabs {{variables}}). Built from confirmed facts only.
+    dynamic_variables: dict[str, str] = field(default_factory=dict)
 
 
 class InterviewProvider(Protocol):
     spec: ProviderSpec
     client_driven: bool
     stateful: bool
-    transport: str  # "livekit" | "iframe"
+    transport: str  # "livekit" | "iframe" | "elevenlabs"
 
     async def launch(self, ctx: LaunchContext) -> dict[str, Any]: ...
 
@@ -278,6 +282,79 @@ class TavusConversationProvider(IframeEmbedProvider):
             return False
 
 
+# --------------------------------------------------------------------------- ElevenLabs
+
+
+class ElevenLabsAgentProvider:
+    """An ElevenLabs agent (prompt, voice and turn-taking configured in their dashboard)
+    that the browser talks to directly with the ElevenLabs SDK.
+
+    Private agent (ELEVENLABS_API_KEY set): we mint a short-lived WebRTC conversation
+    token per session; the browser never sees our key. Public agent without a key: the
+    browser gets only the agent id, which anyone could also use, so this is allowed
+    only when ELEVENLABS_ALLOW_PUBLIC_AGENT=true (local testing).
+
+    The browser reports media-ready and heartbeats (client_driven). Nothing can be
+    stopped from our server: the call ends when the browser disconnects, and the
+    agent's own max-duration setting is the backstop.
+    """
+
+    client_driven = True
+    stateful = False
+    transport = "elevenlabs"
+    API = "https://api.elevenlabs.io/v1"
+
+    def __init__(
+        self,
+        spec: ProviderSpec,
+        *,
+        agent_id: str,
+        api_key: str | None,
+        branch_id: str | None = None,
+        http: httpx.AsyncClient | None = None,
+    ):
+        self.spec, self.agent_id, self.api_key, self.branch_id = spec, agent_id, api_key, branch_id
+        self.http = http or httpx.AsyncClient(timeout=15)
+
+    def session_providers(self) -> dict[str, Any]:
+        return {
+            "provider_id": self.spec.id,
+            "integration": self.spec.integration,
+            "transport": self.transport,
+            "vendor": "elevenlabs",
+            "agent_access": "token" if self.api_key else "public",
+        }
+
+    async def launch(self, ctx: LaunchContext) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "kind": "elevenlabs",
+            "connection_type": "webrtc",
+            "dynamic_variables": ctx.dynamic_variables,
+        }
+        if not self.api_key:
+            return {**out, "agent_id": self.agent_id}
+        params = {"agent_id": self.agent_id}
+        if self.branch_id:
+            params["branch_id"] = self.branch_id
+        try:
+            r = await self.http.get(
+                f"{self.API}/convai/conversation/token",
+                params=params,
+                headers={"xi-api-key": self.api_key},
+            )
+        except httpx.HTTPError as e:
+            raise ProviderError(f"elevenlabs unreachable: {e!r}") from e
+        if r.status_code >= 400:
+            raise ProviderError(f"elevenlabs {r.status_code}: {r.text[:300]}")
+        token = r.json().get("token")
+        if not token:
+            raise ProviderError("elevenlabs returned no token")
+        return {**out, "conversation_token": token}
+
+    async def close(self, sess: dict[str, Any]) -> bool:
+        return True  # ends when the browser disconnects; agent max duration is the backstop
+
+
 # --------------------------------------------------------------------------- registry
 
 
@@ -357,6 +434,22 @@ def load_registry(
                 )
             elif raw["integration"] == "iframe_embed":
                 prov = IframeEmbedProvider(spec, env[raw["url_env"]])
+            elif raw["integration"] == "elevenlabs_agent":
+                key = env.get("ELEVENLABS_API_KEY") or None
+                public_ok = env.get("ELEVENLABS_ALLOW_PUBLIC_AGENT", "").lower() in ("1", "true")
+                if not key and not public_ok:
+                    disabled[pid] = (
+                        "missing env: ELEVENLABS_API_KEY "
+                        "(or ELEVENLABS_ALLOW_PUBLIC_AGENT=true for a public test agent)"
+                    )
+                    continue
+                prov = ElevenLabsAgentProvider(
+                    spec,
+                    agent_id=env["ELEVENLABS_AGENT_ID"],
+                    api_key=key,
+                    branch_id=env.get("ELEVENLABS_BRANCH_ID") or None,
+                    http=http,
+                )
             else:  # tavus
                 secret = env.get("TAVUS_WEBHOOK_SECRET", "")
                 base = env.get("PUBLIC_BASE_URL", "").rstrip("/")

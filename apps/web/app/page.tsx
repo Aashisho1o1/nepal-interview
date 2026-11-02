@@ -101,7 +101,7 @@ export default function Home() {
               </div>
               <ul className="trust">
                 <li>Uses only facts you confirm</li>
-                <li>3-minute sessions</li>
+                <li>Short sessions</li>
                 <li>Video or voice</li>
               </ul>
             </div>
@@ -123,7 +123,7 @@ export default function Home() {
               interviewer only uses what you confirmed.
             </Feature>
             <Feature tint="tint-sun" icon={<IconClock />} title="Short, focused sessions">
-              A three-minute drill with a warm, patient interviewer. Easy to fit in between classes.
+              A few minutes and a few questions with a patient interviewer. Easy to fit in between classes.
             </Feature>
             <Feature tint="tint-mint" icon={<IconChat />} title="Feedback in your own words">
               Your scorecard quotes exactly what you said, shows what went well, and what to practise next.

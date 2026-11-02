@@ -17,6 +17,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field
 
 from interview_core import POLICY_VERSION
+from interview_core.dynamic_vars import build_dynamic_variables
 from interview_core.facts import Fact, build_snapshot, missing_required
 from interview_core.funding import FundingInputError, compute_funding
 from interview_core.policy import DefaultPolicy
@@ -317,7 +318,8 @@ def create_app(
             )
         try:
             track = get_track(body.track)
-            fmt = track.format(body.format_id)
+            # A provider may pin its own format (e.g. a hosted agent built for 5 minutes).
+            fmt = track.format(prov.spec.raw.get("format_id") or body.format_id)
         except KeyError as e:
             raise HTTPException(422, "unknown track or format") from e
         if not track.enabled:
@@ -357,7 +359,8 @@ def create_app(
             raise QuotaError(
                 409, "session_ended", "That session has already ended.", session_id=str(sess["id"])
             )
-        bundle = app.state.policy.build(track, fmt, facts, compute_funding(facts))
+        funding = compute_funding(facts)
+        bundle = app.state.policy.build(track, fmt, facts, funding)
         startup = s.startup_budget_avatar_s if mode == "avatar" else s.startup_budget_voice_s
         ctx = LaunchContext(
             session_id=str(sess["id"]),
@@ -368,6 +371,13 @@ def create_app(
             max_vendor_seconds=startup + sess["practice_seconds"] + s.closing_grace_s,
             instructions=bundle.instructions,
             opening_line=bundle.opening_line,
+            dynamic_variables=build_dynamic_variables(
+                session_id=str(sess["id"]),
+                student_name=st["display_name"],
+                facts=facts,
+                funding=funding,
+                practice_seconds=sess["practice_seconds"],
+            ),
         )
         launch = await _launch_once(prov, sess, ctx) if prov.stateful else await prov.launch(ctx)
         launch = {k: v for k, v in launch.items() if k != "vendor_ref"}
@@ -493,6 +503,7 @@ def create_app(
             "avatar_lost",
             "settled_elsewhere",
             "disconnected",
+            "agent_ended",
         ] = "student_ended",
         st=Depends(current_student),
     ):

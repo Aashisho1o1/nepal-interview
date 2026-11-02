@@ -13,6 +13,7 @@ import json
 import httpx
 import pytest
 
+from conftest import LEGACY_PROVIDERS
 from interview_api.config import Settings
 from interview_api.providers import load_registry
 from interview_api.reconcile import reconcile_once
@@ -73,7 +74,7 @@ class FakeTavus:
 
 
 def test_registry_offers_only_configured_valid_providers():
-    s = Settings(database_url="unused")
+    s = Settings(database_url="unused", providers_file=LEGACY_PROVIDERS)
     reg = load_registry(s, media=None, env={})
     assert reg.order == []  # nothing configured, no LiveKit
     assert "missing env: LIVEAVATAR_EMBED_URL" in reg.disabled["liveavatar_embed"]

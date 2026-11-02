@@ -85,6 +85,15 @@ US_F1 = TrackSpec(
                 "practice format, not a simulation of a specific consular interview."
             ),
         ),
+        SessionFormat(
+            id="interview_5m",
+            label="Five-minute interview (3 questions)",
+            practice_seconds=300,
+            disclosure=(
+                "A five-minute, three-question practice interview with a fictional AI "
+                "interviewer. It does not predict any visa decision."
+            ),
+        ),
     ),
     interviewer_role="a fictional practice interviewer modelled on a professional questioner",
     notes=(
