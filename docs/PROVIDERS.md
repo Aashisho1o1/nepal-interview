@@ -1,68 +1,49 @@
 # Interview providers: plug in, switch, compare
 
 Every way of delivering a mock interview is a **provider**. Students see neutral labels
-("Video interviewer A/B/C", "Voice only") so they rate the experience, not the brand.
-Quotas, the practice clock, ending sessions, ratings and the scorecard are shared; only
-the provider differs.
+("Video interviewer", "Voice only") so they rate the experience, not the brand. Credits,
+the practice clock, ending sessions, ratings and the scorecard are shared; only the
+provider differs.
 
 ```
-config/providers.json        which providers exist, labels, order, iframe permissions
-services/api/.../providers.py one class per integration type (LiveKit agent, iframe embed, Tavus)
-apps/web/components/stages/   one component per launch kind ("livekit", "iframe")
+config/providers.json          which providers exist, labels, order, iframe permissions
+services/api/.../providers.py  one class per integration type (iframe embed, ElevenLabs agent)
+apps/web/components/stages/    one component per launch kind ("iframe", "elevenlabs")
 scripts/provider_comparison.py side-by-side results from real sessions + ratings
 ```
 
-## Add your LiveAvatar embed (5 minutes)
+## The two providers in use
 
-1. Put the URL from your embed code in the API environment (server side, never in the web app):
-   ```
-   LIVEAVATAR_EMBED_URL=https://embed.liveavatar.com/v1/<your-embed-id>?orientation=horizontal
-   ```
-2. Restart the API. "Video interviewer A" now appears on the interview page. Students
-   sign in, pick it, and the embed opens inside our page.
-3. In the LiveAvatar dashboard, before sharing with students:
-   - **Paste the interviewer instructions** into the embed's persona/context. Use
-     `STABLE_POLICY` from `packages/core/interview_core/policy.py` plus a UK pre-CAS
-     scenario. The embed can't see each student's confirmed facts, so it can only run a
-     generic interview.
-   - **Restrict allowed domains** to your site if the dashboard offers it. The embed ID
-     is visible in the page, and anyone with it can spend your credits.
-   - **Set the session length cap** to about 5 minutes. Our page removes the iframe at
-     the deadline, but only the vendor's cap can stop a student who tampers with the page.
-4. On phones, also try `orientation=vertical` in the URL to see whether it fits better.
+| | Voice: ElevenLabs agent | Video: LiveAvatar static embed |
+|---|---|---|
+| Setup | `ELEVENLABS_AGENT_ID`; `ELEVENLABS_API_KEY` for a private agent (per-session tokens) | `LIVEAVATAR_EMBED_URL` from the embed code |
+| Knows this student's facts | Yes: dynamic variables from confirmed facts, prompt in `interviewer/officer_miller_prompt.md` | No: only the dashboard persona |
+| Transcript → scorecard | Via the post-call webhook (not wired yet) | No (rating only) |
+| Server can stop it | No: ends when the browser disconnects; agent max duration is the backstop | No: the browser removes the iframe; set the vendor's session cap |
+| Practice clock starts | When the SDK connects | First click into the embed (or 20 s after load) |
 
-## What each integration type gives you
+A public ElevenLabs agent (no API key) is allowed only with
+`ELEVENLABS_ALLOW_PUBLIC_AGENT=true`, for local testing: anyone with the agent id can
+spend your minutes. Likewise anyone holding the embed URL can spend LiveAvatar credits,
+so restrict the embed to your domain in the HeyGen dashboard.
 
-| | Static embed (LiveAvatar) | Tavus conversation | Own pipeline (LiveKit + Simli/voice) |
-|---|---|---|---|
-| Setup | Paste URL | API key + face ID (+ optional PAL ID) | LiveKit, OpenAI, Simli keys + agent worker |
-| Knows this student's facts | No (dashboard persona only) | Yes (sent per session) | Yes |
-| Transcript → scorecard | No (rating only) | Yes (webhook) | Yes |
-| Server can stop it | No (browser removes the iframe; vendor cap is the backstop) | Yes | Yes |
-| Practice clock starts | First click into the interviewer window (or 20 s after load) | Same | When our agent reports media ready |
-| Turn latency measured | No; students rate "reply speed" | No; rating | Yes, by our agent |
-
-The Tavus adapter follows Tavus's current API (`face_id`/`pal_id`, checked 2 Nov 2026)
-but has only run against a mock. Enable it with `TAVUS_API_KEY`, `TAVUS_FACE_ID`,
-optional `TAVUS_PAL_ID`, and for transcripts `PUBLIC_BASE_URL` + `TAVUS_WEBHOOK_SECRET`.
+The target for the video tier is LiveAvatar's session-token flow driven by the same
+ElevenLabs agent (facts and transcripts included); see
+`docs/ELEVENLABS_LIVEAVATAR_FOCUS.md` §6.
 
 ## Switch or add a provider
 
 - **Turn providers on/off or reorder:** edit `config/providers.json` (`enabled`, order),
-  or set `ENABLED_PROVIDERS=liveavatar_embed,livekit_voice` for a quick test.
-- **Another vendor with an embed or room URL** (D-ID, Anam share link, a second LiveAvatar
-  persona): copy the `liveavatar_embed` entry with a new `id`, `url_env` and
-  `allowed_hosts`. No code changes. Add its origin to `EMBED_ORIGINS` for the web app,
-  otherwise the browser blocks its microphone.
-- **A vendor that needs per-session API calls:** copy `TavusConversationProvider` (about
-  60 lines). Mark it `stateful = True` and the API guarantees one vendor conversation per
-  session, even if a student double-clicks.
-- **A LiveKit avatar plugin** (HeyGen LiveAvatar via LiveKit, Anam, bitHuman, Tavus via
-  LiveKit): add a small renderer to `AVATAR_RENDERERS` in
-  `services/agent/interview_agent/adapters.py` and a providers.json entry with
-  `"integration": "livekit_agent", "avatar": "<name>"`.
-- **A vendor with its own JS SDK** (e.g. ElevenLabs Agents): one new stage component and
-  one new launch `kind`. This is the only case that touches the web app.
+  or set `ENABLED_PROVIDERS=elevenlabs_voice` for a quick test. `VIDEO_TIER_ENABLED` and
+  `VOICE_TIER_ENABLED` pause a whole tier without a config change.
+- **Another vendor with an embed URL:** copy the `liveavatar_embed` entry with a new
+  `id`, `url_env` and `allowed_hosts`. No code changes. Add its origin to `EMBED_ORIGINS`
+  in the web app, otherwise the browser blocks its microphone.
+- **A vendor that needs per-session API calls:** add a class in `providers.py` with
+  `launch()` and `close()`; mark it `stateful = True` and the API guarantees one vendor
+  conversation per session, even if a student double-clicks.
+- **A vendor with its own JS SDK:** one new stage component and one new launch `kind`.
+  This is the only case that touches the web app.
 
 ## Compare them
 
@@ -70,18 +51,15 @@ optional `TAVUS_PAL_ID`, and for transcripts `PUBLIC_BASE_URL` + `TAVUS_WEBHOOK_
 DATABASE_URL=... python scripts/provider_comparison.py --since 2026-11-03
 ```
 
-For each provider it shows: start success, failed starts, drops, time until the student
-can talk, our measured reply latency (own pipeline only), average realism rating,
-"reply speed felt OK", audio/video OK, "would use again", billed minutes, our cost, end
-reasons, vendor events seen, and student comments. Vendors that bill you directly must
+Per provider: start success, failed starts, drops, time until the student can talk,
+average realism rating, "reply speed felt OK", audio/video OK, "would use again", billed
+minutes, our cost, end reasons and student comments. Vendors that bill you directly must
 be reconciled from their dashboards.
 
-## Things that will bite if forgotten
+## Things that bite if forgotten
 
-- `EMBED_ORIGINS` (web) must include every iframe vendor's origin. Missing it means the
-  embed loads but cannot hear the student.
-- Students must allow the microphone for the vendor's iframe. The browser asks
+- `EMBED_ORIGINS` (web) must include every iframe vendor's origin.
+- Students must allow the microphone for the vendor's iframe; the browser asks
   separately for the embedded site.
-- A static embed only knows what its dashboard persona knows. For document-grounded
-  interviews, use a per-session API (Tavus, or LiveAvatar's API in "Full" mode) or our
-  own pipeline.
+- The ElevenLabs prompt only uses a dynamic variable if it references `{{that_variable}}`.
+  `tests/test_core_domain.py` checks the prompt file against the variables we send.

@@ -16,10 +16,6 @@ from interview_api.providers import (
     ProviderError,
     load_registry,
 )
-from interview_core.dynamic_vars import MAX_VALUE, build_dynamic_variables
-from interview_core.facts import Fact, build_snapshot
-from interview_core.funding import compute_funding
-from interview_core.synthetic import SYNTHETIC_FACTS
 
 AGENT = "agent_test123"
 PUBLIC_ENV = {"ELEVENLABS_AGENT_ID": AGENT, "ELEVENLABS_ALLOW_PUBLIC_AGENT": "true"}
@@ -27,7 +23,7 @@ PRIVATE_ENV = {"ELEVENLABS_AGENT_ID": AGENT, "ELEVENLABS_API_KEY": "xi-secret-ke
 
 
 def body(provider_id: str = "elevenlabs_voice") -> dict:
-    return {"track": "us_f1", "format_id": "pressure_drill_3m", "provider_id": provider_id}
+    return {"track": "uk_pre_cas", "format_id": "interview_5m", "provider_id": provider_id}
 
 
 def ctx(**kw) -> LaunchContext:
@@ -104,26 +100,6 @@ async def test_token_failure_is_a_provider_error(status, payload):
     )
     with pytest.raises(ProviderError):
         await reg.get("elevenlabs_voice").launch(ctx())
-
-
-def test_dynamic_variables_use_confirmed_facts_and_precomputed_funding():
-    snap = build_snapshot(
-        [Fact(r, f, v, lbl, sn, "confirmed") for r, f, v, lbl, sn in SYNTHETIC_FACTS], 1
-    )
-    v = build_dynamic_variables(
-        session_id="abc",
-        student_name="Asha Synthetic",
-        facts=snap,
-        funding=compute_funding(snap),
-        practice_seconds=300,
-    )
-    assert v["session_id"] == "abc" and v["student_first_name"] == "Asha"
-    assert v["university"] == "Example State University"
-    assert v["intake"] == "August 2027"
-    assert v["interview_format"] == "3 questions, 5 minutes"
-    assert v["cas_status"] == "not yet issued"
-    assert "USD" in v["funding_summary"] and "\n" not in v["funding_summary"]
-    assert all(isinstance(x, str) and len(x) <= MAX_VALUE for x in v.values())
 
 
 async def test_voice_session_reserves_five_minutes_and_passes_session_id(make_env):

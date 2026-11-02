@@ -1,10 +1,9 @@
-"""Domain logic shared by the session API and the interview agent.
+"""Domain logic shared by the session API: tracks, confirmed facts, funding
+arithmetic, the per-session variables sent to the hosted interviewer, and the
+scorecard contract with its graders. Nothing here talks to a vendor."""
 
-Nothing in this package talks to a network provider. Voice, avatar, grading and
-media transport sit behind adapters in their own modules so they can be swapped
-and tested without live keys.
-"""
-
-POLICY_VERSION = "policy-2026-11-01.1"
+# Stored on every session so feedback can be read against the prompt that ran.
+# Bump when interviewer/officer_miller_prompt.md changes in substance.
+POLICY_VERSION = "officer-miller-2026-11-02.1"
 RUBRIC_VERSION = "rubric-2026-11-01.1"
 SCORECARD_SCHEMA_VERSION = "1.0"

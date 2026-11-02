@@ -6,7 +6,7 @@ const nunito = Nunito({ subsets: ["latin"], variable: "--font-sans", display: "s
 
 export const metadata: Metadata = {
   title: "Interview Practice",
-  description: "Practise your study-visa interview with a friendly, fictional AI interviewer.",
+  description: "Practise your UK pre-CAS interview with a friendly, fictional AI interviewer.",
 };
 
 export const viewport: Viewport = {

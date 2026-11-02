@@ -31,10 +31,9 @@ HERO_ENV = {
 }
 VIDEO = "liveavatar_embed"
 VOICE = "elevenlabs_voice"
-TRACK = "us_f1"
-FORMAT = "pressure_drill_3m"
-VIDEO_SECONDS = 180  # the embed runs the track's default format
-VOICE_SECONDS = 300  # the ElevenLabs agent pins the five-minute format
+TRACK = "uk_pre_cas"
+FORMAT = "interview_5m"
+VIDEO_SECONDS = VOICE_SECONDS = 300  # one five-minute format for both tiers
 
 
 def settings(**kw) -> Settings:

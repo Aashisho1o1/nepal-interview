@@ -92,11 +92,11 @@ async def test_cannot_start_without_confirmed_snapshot_and_corrections_keep_shap
     assert r.status_code == 200
     snap = await confirm_all_and_snapshot(c)
     assert snap["funding"]["gap_minor"] == 0
-    assert snap["missing"]["us_f1"] == []
+    assert snap["missing"]["uk_pre_cas"] == []
     # A rejected fact leaves the snapshot and blocks the session.
     await c.patch("/api/profile/facts/program-course", json={"status": "rejected"})
     snap2 = (await c.post("/api/profile/snapshot")).json()
-    assert "program.course" in snap2["missing"]["us_f1"]
+    assert "program.course" in snap2["missing"]["uk_pre_cas"]
     r = await start(c)
     assert r.status_code == 409 and r.json()["error"] == "facts_incomplete"
 
@@ -116,7 +116,7 @@ async def test_no_cross_student_access(make_env):
         "/api/profile/facts/fund-loan", json={"status": "corrected", "value": {"amount": "1.00"}}
     )
     a_loan = [f for f in (await a.get("/api/profile/facts")).json() if f["ref"] == "fund-loan"][0]
-    assert a_loan["value_json"]["amount"] == "8000.00"
+    assert a_loan["value_json"]["amount"] == "8500.00"
     assert (await a.get(f"/api/sessions/{sid}")).status_code == 200
 
 
@@ -214,7 +214,7 @@ TURNS = [
     turn(1, "interviewer", "Why this course?"),
     turn(2, "student", "I want to study data science because I worked as a developer."),
     turn(3, "interviewer", "Who is paying for", canceled=True),
-    turn(4, "student", "My father will pay. He has savings of 20,000 dollars."),
+    turn(4, "student", "My father will pay. He has savings of 15,000 pounds."),
 ]
 
 
@@ -230,8 +230,8 @@ async def test_full_voice_session_lifecycle_with_feedback(make_env):
     launch = s["launch"]
     assert launch["kind"] == "elevenlabs"
     dv = launch["dynamic_variables"]
-    assert dv["session_id"] == sid and dv["university"] == "Example State University"
-    assert "28,000.00" in dv["funding_summary"]  # precomputed, never left to the agent
+    assert dv["session_id"] == sid and dv["university"] == "Example University"
+    assert "GBP 28,006.00" in dv["funding_summary"]  # precomputed, never left to the agent
 
     ev = await media_ready(c, sid)
     assert ev["live"] and ev["practice_ends_at"]
@@ -333,11 +333,11 @@ async def test_kill_switch_disabled_track_and_rate_limit(make_env):
     assert (await start(c, VOICE)).status_code == 429
 
 
-async def test_disabled_track_is_refused(make_env):
+async def test_unknown_track_or_format_is_refused(make_env):
     env = await make_env()
     c = await ready_student(env)
-    r = await start(c, track="uk_pre_cas", format_id="short_drill_3m")
-    assert r.status_code == 409 and r.json()["error"] == "track_not_available"
+    assert (await start(c, track="ukvi", format_id="interview_5m")).status_code == 422
+    assert (await start(c, track="uk_pre_cas", format_id="drill_3m")).status_code == 422
 
 
 # ---------------------------------------------------------------- reconciliation

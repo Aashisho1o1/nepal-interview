@@ -34,7 +34,7 @@ export default function Home() {
   async function goNext() {
     try {
       const snap = await api<Snapshot>("/profile/snapshot");
-      const ready = snap.version !== null && (snap.missing?.us_f1 ?? []).length === 0 && !snap.funding?.error;
+      const ready = snap.version !== null && (snap.missing?.uk_pre_cas ?? []).length === 0 && !snap.funding?.error;
       router.push(ready ? "/interview" : "/prepare");
     } catch {
       router.push("/prepare");
@@ -90,11 +90,12 @@ export default function Home() {
             <div>
               <span className="eyebrow">Namaste, and welcome!</span>
               <h1>
-                Walk into your visa interview <span className="hl">feeling ready</span>.
+                Walk into your pre-CAS interview <span className="hl">feeling ready</span>.
               </h1>
               <p className="lead">
-                Practise with a friendly AI interviewer that knows your study plans and funding. Answer in your own
-                words, get kind and clear feedback, and try again whenever you like.
+                Practise your UK university credibility interview with a friendly AI interviewer that knows your
+                course, your university and your funding. Answer in your own words, get kind and clear feedback, and
+                try again whenever you like.
               </p>
               <div className="cta-row">
                 <a className="btn" href="#choose">Start practising</a>
@@ -241,15 +242,15 @@ export default function Home() {
             </form>
           )}
 
-          <p className="fine">Your interviewer is a fictional AI, not a consular officer.</p>
+          <p className="fine">Your interviewer is a fictional AI, not a university officer or UKVI.</p>
         </div>
       </section>
 
       <footer className="footer">
         <div className="wrap">
           <p>
-            Practice only. This is not a government service, and nothing here predicts any visa decision. Always
-            answer truthfully.
+            Practice only. This is not a government or university service, and nothing here predicts any CAS or
+            visa decision. Always answer truthfully.
           </p>
         </div>
       </footer>

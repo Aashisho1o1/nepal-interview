@@ -49,7 +49,7 @@ class Finding(_Strict):
 class Scorecard(_Strict):
     schema_version: Literal["1.0"]
     rubric_version: str
-    track: Literal["us_f1", "uk_pre_cas", "ukvi"]
+    track: Literal["uk_pre_cas"]
     session_id: str
     assessment_scope: Literal["practice_feedback_only"]
     transcript_quality: Literal["good", "adequate", "poor", "insufficient"]

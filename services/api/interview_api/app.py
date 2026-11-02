@@ -129,22 +129,6 @@ def create_app(
             "voice_available": s.voice_tier_enabled,
         }
 
-    @app.get("/api/tracks")
-    async def tracks():
-        return [
-            {
-                "id": t.id,
-                "label": t.label,
-                "stage": t.stage,
-                "enabled": t.enabled,
-                "required_facts": list(t.required_facts),
-                "must_not_require": list(t.must_not_require),
-                "formats": [f.__dict__ for f in t.formats],
-                "notes": list(t.notes),
-            }
-            for t in TRACKS.values()
-        ]
-
     @app.get("/api/providers")
     async def list_providers(st=Depends(current_student)):
         """Providers offered to this student, in display order. Vendor names hidden."""
@@ -287,12 +271,9 @@ def create_app(
             )
         try:
             track = get_track(body.track)
-            # A provider may pin its own format (e.g. a hosted agent built for 5 minutes).
-            fmt = track.format(prov.spec.raw.get("format_id") or body.format_id)
+            fmt = track.format(body.format_id)
         except KeyError as e:
             raise HTTPException(422, "unknown track or format") from e
-        if not track.enabled:
-            raise QuotaError(409, "track_not_available", f"{track.label} is not available yet.")
         key = request.headers.get("idempotency-key", "")
         async with app.state.pool.connection() as conn:
             snap = await _latest_snapshot(conn, st["student_id"])

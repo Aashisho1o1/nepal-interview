@@ -18,7 +18,7 @@ Do **not** propose anything that breaks the constraints in section 7. They are l
 
 ## 1. The product in one paragraph
 
-A website where **students from Nepal practise their study-visa or university interview** with a **fictional AI interviewer**, by **voice** or **video**, and then get **feedback built on their own words and their own documents**. Before practising, the student checks the key facts we extracted from their documents (university, course, costs, funds, sponsor) and confirms what's right or rejects what's wrong. The interviewer only uses confirmed facts. After the session the student sees what went well, what to practise next, and the transcript, then rates the experience.
+A website where **students from Nepal practise their UK university pre-CAS interview** (the credibility interview a university holds before issuing the CAS needed for the visa) with a **fictional AI interviewer**, by **voice** or **video**, and then get **feedback built on their own words and their own documents**. Before practising, the student checks the key facts we extracted from their documents (university, course, costs, funds, sponsor) and confirms what's right or rejects what's wrong. The interviewer only uses confirmed facts. After the session the student sees what went well, what to practise next, and the transcript, then rates the experience.
 
 **It is practice only.** It is not a government service, the interviewer is not a real officer, and nothing predicts a visa decision.
 
@@ -26,7 +26,7 @@ A website where **students from Nepal practise their study-visa or university in
 
 | | |
 |---|---|
-| **Primary user** | Nepali students, mostly 18–28, applying to study abroad. Today: US F-1 visa interviews. Next: UK university "pre-CAS" credibility interviews. |
+| **Primary user** | Nepali students, mostly 18–28, holding an offer from a UK university and preparing for its pre-CAS credibility interview. |
 | **Their state of mind** | Nervous. A visa refusal is expensive and emotional. They want to feel prepared and less afraid. |
 | **English** | Good reading English, but not native. Plain words and short sentences matter. |
 | **Devices and network** | **Mostly phones** (Android Chrome, some iPhone Safari), often on **mobile data** in Nepal. Low bandwidth, sometimes noisy rooms. Desktop is secondary. |
@@ -34,7 +34,7 @@ A website where **students from Nepal practise their study-visa or university in
 | **Secondary users** | Consultancy counsellors (will review some feedback); an admin who manages credits (admin page not built yet, out of scope here). |
 
 **What a student must understand in five seconds on the home page:**
-1. This helps me practise my visa / university interview.
+1. This helps me practise my pre-CAS (university credibility) interview.
 2. I talk to an AI interviewer, by voice or video.
 3. It uses my real details and gives me useful feedback.
 4. It's safe and honest (practice only, not the government).
@@ -60,7 +60,7 @@ The app has six screens. Each is listed with its purpose, what's on it today, an
 1. **Top bar:** small logo mark (sun over a red mountain in a peach circle) plus the name "Interview Practice"; a "Sign in" pill on the right (or "Hi, Asha" when signed in).
 2. **Hero:**
    - pill "Namaste, and welcome!";
-   - headline "Walk into your visa interview **feeling ready**." ("feeling ready" has a yellow highlighter underline);
+   - headline "Walk into your pre-CAS interview **feeling ready**." ("feeling ready" has a yellow highlighter underline);
    - lead paragraph;
    - two buttons, "Start practising" (filled) and "How it works" (outline);
    - three ticks: "Uses only facts you confirm", "Short sessions", "Video or voice".
@@ -86,14 +86,13 @@ The app has six screens. Each is listed with its purpose, what's on it today, an
 **Purpose:** the student checks each fact we extracted from their documents and confirms or rejects it. This is the core trust feature: "what's right / what's wrong in my documents".
 **Today, from the top:**
 - **Title and instructions.**
-- **"Interview type" card:** lists the US F-1 track (Available) and two UK tracks marked "Not yet available".
 - **"Facts from your documents" card:** about 13 rows. Each row shows the raw field key (e.g. `funding.costs`), the value in bold, "Source: document name — 'quoted snippet'", and a status pill (proposed / confirmed / rejected). Proposed facts show **Confirm** and **Reject** buttons.
 - **Save button:** "Save confirmed facts" / "Save a new version".
 - **"Funding arithmetic" table:** first-year costs, scholarships subtracted, amount to fund, funds in confirmed facts, and the gap, with a caveat paragraph and "Be ready to explain:" bullets.
 - **"Continue to practice" button.**
 
 ### 4.3 Interview picker `/interview`, before starting (screenshot 04)
-- **Title:** "US F-1 practice drill", with a disclaimer paragraph.
+- **Title:** "Your pre-CAS practice interview", with a disclaimer paragraph.
 - **Interviewers:** a radio list, "Video interviewer A" and "Voice only". Each has a dense note covering data use, which vendor gets the voice (required for consent), minutes left and "No scorecard for this one yet".
 - **Button:** "Start practice". Most of the desktop screen is empty.
 
@@ -166,7 +165,7 @@ Phone screenshots are at 390px width (2× pixels). Long phone pages are split in
 | `06-scorecard-desktop.png`, `06-scorecard-phone-part1…4.png` | Feedback page with findings, transcript and rating (sample transcript) |
 | `08-results-no-transcript-phone.png` | Results when the interviewer gives no transcript (rating only) |
 
-All data shown is synthetic: "Asha Synthetic", "Example State University". If you can only take a few images, the most important are `01-home-desktop`, `01-home-phone-part1`, `03-facts-and-funding-desktop`, `04-interview-picker-phone`, `05-voice-interview-live-phone` and `06-scorecard-desktop`.
+All data shown is synthetic ("Asha Synthetic"). The screenshots were taken just before the copy switched from US F-1 to UK pre-CAS (headline, interview title, GBP figures); the layouts are unchanged. If you can only take a few images, the most important are `01-home-desktop`, `01-home-phone-part1`, `03-facts-and-funding-desktop`, `04-interview-picker-phone`, `05-voice-interview-live-phone` and `06-scorecard-desktop`.
 
 ## 7. Constraints you must respect
 
@@ -204,26 +203,24 @@ All data shown is synthetic: "Asha Synthetic", "Example State University". If yo
 **Facts page:**
 8. Shows raw keys like `funding.costs` and ISO dates like `2027-08-23`.
 9. ~13 facts in one long list with no grouping (About you / Programme / Costs / Funds).
-10. The "Interview type" card lists unavailable tracks above the facts.
-11. "Save a new version" is jargon.
-12. The funding table is useful, but its caveat text is dense.
+10. "Save a new version" is jargon.
+11. The funding table is useful, but its caveat text is dense.
 
 **Interview picker:**
-13. Labels like "Video interviewer A" mean nothing to a student.
-14. Copy still says "Three minutes" although voice is now five.
-15. Each option is a paragraph of vendor and data-use text.
-16. On desktop, ~70% of the screen is empty.
+12. Labels like "Video interviewer A" mean nothing to a student.
+13. Each option is a paragraph of vendor and data-use text.
+14. On desktop, ~70% of the screen is empty.
 
 **Live voice:**
-17. The status appears twice (inside the panel and below it).
-18. The dark translucent overlay chips look heavy on the warm panel.
+15. The status appears twice (inside the panel and below it).
+16. The dark translucent overlay chips look heavy on the warm panel.
 
 **Feedback page:**
-19. Status pills show internal words ("completed", "deadline").
-20. "Based on: cost-tuition, cost-living…" shows internal IDs.
-21. Student quotes are styled as underlined red links, which looks like an error.
-22. The rating form is long and visually heavy, and the disabled Submit button looks washed out.
-23. There's no summary at the top (e.g. "1 strength, 1 thing to practise") and no clear "Practise again" button.
+17. Status pills show internal words ("completed", "deadline").
+18. "Based on: cost-tuition, cost-living…" shows internal IDs.
+19. Student quotes are styled as underlined red links, which looks like an error.
+20. The rating form is long and visually heavy, and the disabled Submit button looks washed out.
+21. There's no summary at the top (e.g. "1 strength, 1 thing to practise") and no clear "Practise again" button.
 
 ## 9. Response format (please follow)
 

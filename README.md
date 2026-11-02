@@ -1,65 +1,75 @@
-# Nepal interview practice — milestone one
+# Nepal interview practice
 
-An authenticated, time-limited mock US F-1 interview with a live avatar (Simli on
-LiveKit), confirmed synthetic student facts, deterministic funding arithmetic,
-interruption handling, voice fallback, atomic quotas and an evidence-linked scorecard.
+Students from Nepal practise the **UK university pre-CAS credibility interview** with a
+fictional AI interviewer, by **voice** or **video**, and get feedback built on their own
+words and their confirmed documents. Practice only: not a government or university
+service, and nothing here predicts a CAS or visa decision.
 
-**Status:** Everything except a live provider call has been built and tested (see
-`docs/MILESTONE1_REPORT.md`). No live interview has been run yet, so latency and cost
-are unmeasured. This is not production-ready.
+**Status:** early build for testing with 5–10 students. Voice runs on an ElevenLabs
+agent; video on a HeyGen LiveAvatar embed. The phase plan is
+`docs/ELEVENLABS_LIVEAVATAR_FOCUS.md`; how interviewers plug in is `docs/PROVIDERS.md`.
 
 ```
-apps/web/                    Next.js 16 student UI (login, confirm facts, interview, scorecard)
-services/api/interview_api/  FastAPI session API: auth, quotas, tokens, settlement, grading, reconciler
-services/agent/interview_agent/  LiveKit Agents worker: voice + avatar adapters, watchdog, teardown
-packages/core/interview_core/    tracks, facts, funding maths, interview policy, scorecard, graders
-config/prices.json           versioned price table (planning snapshot; OpenAI deliberately unpriced)
-scripts/measurement_report.py    latency / interruption / reliability / cost from recorded sessions
-scripts/provider_comparison.py   side-by-side provider results (LiveAvatar embed, Tavus, own pipeline)
-config/providers.json        interview providers offered to students (see docs/PROVIDERS.md)
-tests/                       pytest (Postgres-backed API tests, agent runtime, domain)
+apps/web/                        Next.js 16 student UI: home, confirm facts, interview, feedback
+services/api/interview_api/      FastAPI: auth, facts, credits, sessions, providers, feedback, reconciler
+packages/core/interview_core/    domain: the track, facts, funding maths, agent variables, scorecard + graders
+interviewer/                     the interviewer prompt (pasted into the ElevenLabs agent)
+config/providers.json            interviewers offered to students   config/prices.json  vendor meters
+scripts/provider_comparison.py   side-by-side results per interviewer from real sessions
+tests/                           pytest, Postgres-backed
 ```
 
 ## How a session works
 
-1. The student signs in (HttpOnly cookie) and confirms each proposed fact against its source. Only confirmed facts go into a versioned snapshot, and funding is computed from it with `Decimal`.
-2. `POST /api/sessions` with an `Idempotency-Key`: locks the entitlement row, refuses a second live session (partial unique index), reserves the full drill length, creates the session with a hard deadline, then mints a 90-second, room-scoped, microphone-only LiveKit token that dispatches the agent with the session id.
-3. The agent fetches its config from `/internal/...` (bearer service token), waits for the student, starts Simli (falling back to voice on any failure *before* the voice session starts, so only one audio stream exists), then reports `media_ready`. The student-facing clock starts there; startup is never charged.
-4. A watchdog speaks the closing line at the server-set `practice_ends_at`; an independent guard fires at the hard deadline. Silence gets one gentle prompt, then ends as `no_input`. Over-long answers trigger a "please answer directly" prompt.
-5. Every exit path (deadline, student left, End button, `pagehide` beacon, avatar lost, provider error, job shutdown) runs a single idempotent teardown: flush turns → settle → close avatar → close voice → delete room → usage → grade.
-6. Settlement charges whole seconds from media-ready, capped at the reservation, once. Failed startup and short no-speech sessions are refunded; post-fallback seconds bill to the voice bucket.
-7. The reconciler (`python -m interview_api.reconcile --loop`) settles sessions whose agent died, retries room deletion, deletes orphan rooms and grades anything left ungraded.
-8. Feedback is generated from the transcript and passes strict validation (verbatim quotes, valid turn/timestamps, snapshot-only document refs, no approval/honesty/emotion claims) before it is shown. One repair attempt is allowed; otherwise it shows a recoverable failure.
+1. The student signs in (HttpOnly cookie) and confirms each proposed fact against its
+   source. Only confirmed facts enter a versioned snapshot; funding is computed from it
+   with `Decimal`, never by the interviewer.
+2. `POST /api/sessions` with an `Idempotency-Key` reserves the full session length from
+   the tier's credit bucket (one live session per student, enforced by the database) and
+   asks the chosen provider for a launch: a per-session ElevenLabs token plus dynamic
+   variables built from the confirmed facts, or the LiveAvatar embed URL.
+3. The browser runs the call and reports the lifecycle: `media_ready` starts the
+   server-owned clock, heartbeats keep the session live, and the End button, the
+   deadline tick or the page-exit beacon end it.
+4. Settlement runs once: whole seconds from media-ready, capped at the reservation.
+   A session that never connected, or a short one with no student speech, is refunded.
+5. The reconciler (`python -m interview_api.reconcile --loop`) settles sessions whose
+   browser went quiet, asks vendors to stop, and grades transcripts that arrived late.
+6. Feedback: transcript → rules grader → strict validation (verbatim quotes, snapshot-only
+   references, no approval predictions, no honesty or emotion claims) → scorecard. Voice
+   transcripts will arrive through the ElevenLabs post-call webhook (not wired yet); the
+   static video embed sends none, so those sessions get a rating form only.
 
 ## Run locally
 
-Requires Python 3.11+, [uv](https://docs.astral.sh/uv/), Node 20.9+, Postgres 16.
+Requires Python 3.11+, [uv](https://docs.astral.sh/uv/), Node 20.9+, Postgres 14+.
 
 ```bash
-uv sync                                   # pinned Python deps
-cp .env.example .env                      # fill in keys (server-side only)
-export PYTHONPATH=packages/core:services/api:services/agent
-SEED_PASSWORD='choose-one' uv run python -m interview_api.seed
-uv run uvicorn interview_api.app:create_app --factory --port 8000
-uv run python -m interview_api.reconcile --loop
-uv run python -m interview_agent.agent dev           # or: lk agent dev
+uv sync
+cp .env.example .env            # ELEVENLABS_AGENT_ID (+ API key), LIVEAVATAR_EMBED_URL
+export PYTHONPATH=packages/core:services/api
+SEED_PASSWORD='choose-one' uv run --env-file .env python -m interview_api.seed
+uv run --env-file .env uvicorn interview_api.app:create_app --factory --port 8000
+uv run --env-file .env python -m interview_api.reconcile --loop
 cd apps/web && cp .env.example .env.local && npm ci && npm run dev
 ```
 
-Open http://localhost:3000, sign in as `student@synthetic.test`, confirm the facts, start.
-For UI work without LiveKit set `MEDIA_BACKEND=fake` (connection then fails and the
-session is refunded, which also exercises the failure path).
+Open http://localhost:3000 and sign in as `student@synthetic.test`. The seeded student
+is synthetic (Example University, GBP figures); confirm the facts, then practise.
+
+Paste `interviewer/officer_miller_prompt.md` into the ElevenLabs agent; the app sends
+the `{{variables}}` it references on every session.
 
 ## Tests
 
 ```bash
-# Postgres reachable at TEST_DATABASE_URL (default: socket /var/tmp, port 5433, db ni_test)
-uv run pytest -q
+TEST_DATABASE_URL=postgresql://localhost/ni_test uv run pytest -q
 cd apps/web && npx eslint && npx tsc --noEmit && npm run build
 ```
 
 ## Before any paid use
 
-Run `docs/RUNBOOK_first_live_interview.md`, then `scripts/measurement_report.py`. Fill
-OpenAI prices from the current pricing page or an invoice. Set package allowances only
-from measured p90 cost per session.
+Turn on authentication for the ElevenLabs agent and set `ELEVENLABS_API_KEY`; restrict
+the LiveAvatar embed to your domain and cap its session length in the HeyGen dashboard.
+Fill `config/prices.json` from invoices, then run `scripts/provider_comparison.py` on
+real sessions before setting package sizes.

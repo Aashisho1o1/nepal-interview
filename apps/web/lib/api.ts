@@ -49,15 +49,6 @@ export type Fact = {
   confirmation_status: "proposed" | "confirmed" | "corrected" | "rejected";
 };
 
-export type Track = {
-  id: string;
-  label: string;
-  stage: string;
-  enabled: boolean;
-  formats: { id: string; label: string; practice_seconds: number; disclosure: string }[];
-  notes: string[];
-};
-
 export function fmtMinor(minor: number, currency: string) {
   return `${currency} ${(minor / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }

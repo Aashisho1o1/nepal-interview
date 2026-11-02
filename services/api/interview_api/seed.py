@@ -41,7 +41,7 @@ async def seed(
         uid = (await cur.fetchone())["id"]
         cur = await conn.execute(
             """INSERT INTO student_profiles (user_id, display_name, country_track, is_synthetic)
-               VALUES (%s,%s,'us_f1',true)
+               VALUES (%s,%s,'uk_pre_cas',true)
                ON CONFLICT (user_id) DO UPDATE SET display_name=EXCLUDED.display_name RETURNING id""",
             (uid, name),
         )

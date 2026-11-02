@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, describeValue, Fact, fmtMinor, Track } from "@/lib/api";
+import { api, ApiError, describeValue, Fact, fmtMinor } from "@/lib/api";
 
 type Funding = {
   currency: string;
@@ -28,20 +28,14 @@ const STATUS_LABEL: Record<string, string> = {
 export default function Prepare() {
   const router = useRouter();
   const [facts, setFacts] = useState<Fact[]>([]);
-  const [tracks, setTracks] = useState<Track[]>([]);
   const [snap, setSnap] = useState<Snapshot>({ version: null });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    return Promise.all([
-      api<Fact[]>("/profile/facts"),
-      api<Track[]>("/tracks"),
-      api<Snapshot>("/profile/snapshot"),
-    ])
-      .then(([f, t, s]) => {
+    return Promise.all([api<Fact[]>("/profile/facts"), api<Snapshot>("/profile/snapshot")])
+      .then(([f, s]) => {
         setFacts(f);
-        setTracks(t);
         setSnap(s);
       })
       .catch((e) => {
@@ -73,8 +67,8 @@ export default function Prepare() {
   }
 
   const pending = facts.filter((f) => f.confirmation_status === "proposed").length;
-  const f1Missing = snap.missing?.us_f1 ?? [];
-  const ready = snap.version !== null && f1Missing.length === 0 && !snap.funding?.error;
+  const missing = snap.missing?.uk_pre_cas ?? [];
+  const ready = snap.version !== null && missing.length === 0 && !snap.funding?.error;
 
   return (
     <main>
@@ -83,19 +77,6 @@ export default function Prepare() {
         The interviewer only uses facts you confirm here. Check each one against its source. If a value
         is wrong, reject it; never confirm a figure you cannot document.
       </p>
-
-      <h2>Interview type</h2>
-      <div className="card stack">
-        {tracks.map((t) => (
-          <div key={t.id}>
-            <div className="row">
-              <strong>{t.label}</strong>
-              <span className={`pill ${t.enabled ? "good" : ""}`}>{t.enabled ? "Available" : "Not yet available"}</span>
-            </div>
-            <p className="muted">{t.stage}</p>
-          </div>
-        ))}
-      </div>
 
       <h2>Facts from your documents {pending > 0 && <span className="pill warn">{pending} to review</span>}</h2>
       <div className="card">
@@ -152,8 +133,8 @@ export default function Prepare() {
           </div>
         </>
       )}
-      {snap.version !== null && f1Missing.length > 0 && (
-        <p className="error">Missing for US F-1 practice: {f1Missing.join(", ")}</p>
+      {snap.version !== null && missing.length > 0 && (
+        <p className="error">Still needed before you can practise: {missing.join(", ")}</p>
       )}
       {ready && (
         <p><Link href="/interview"><button>Continue to practice</button></Link></p>

@@ -33,7 +33,6 @@
       "requires_env": [
         "ELEVENLABS_AGENT_ID"
       ],
-      "format_id": "interview_5m",
       "data_note": "Audio only, lower data use. Your voice and confirmed facts go to ElevenLabs.",
       "capabilities": {
         "transcripts": false,

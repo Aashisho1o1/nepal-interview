@@ -112,7 +112,7 @@ export default function Interview() {
       const s = await api<StartResp>("/sessions", {
         method: "POST",
         headers: { "idempotency-key": key },
-        json: { track: "us_f1", format_id: "pressure_drill_3m", provider_id: providerId },
+        json: { track: "uk_pre_cas", format_id: "interview_5m", provider_id: providerId },
       });
       sessionStorage.removeItem(KEY_STORE);
       sessionRef.current = s.session_id;
@@ -140,12 +140,12 @@ export default function Interview() {
 
   return (
     <main>
-      <h1>US F-1 practice drill</h1>
+      <h1>Your pre-CAS practice interview</h1>
       {!live && (
         <>
           <p className="muted">
-            Three minutes with a fictional AI practice interviewer. The interviewer is not a consular officer and this
-            does not predict a visa decision. Answer truthfully using your confirmed facts.
+            Five minutes and three questions with a fictional AI interviewer. It is not a university officer or UKVI,
+            and it does not predict any decision. Answer truthfully using your confirmed facts.
           </p>
           <div className="choices" role="radiogroup" aria-label="Interviewer">
             {providers.map((p) => (
