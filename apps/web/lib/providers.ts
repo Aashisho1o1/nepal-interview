@@ -63,11 +63,11 @@ export type Phase =
 export const PHASE_TEXT: Record<Phase, string> = {
   idle: "",
   starting: "Reserving your session…",
-  connecting: "Connecting to the interviewer…",
-  waiting_start: "Tap or click the interviewer window to begin",
+  connecting: "Connecting…",
+  waiting_start: "Tap the interviewer window to begin",
   in_call: "Interview in progress",
-  listening: "Listening",
-  speaking: "Interviewer speaking",
+  listening: "Your turn. Speak now.",
+  speaking: "Interviewer speaking…",
   completed: "Session complete",
   error: "",
 };

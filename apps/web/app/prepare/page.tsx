@@ -1,9 +1,13 @@
 "use client";
 
-import Link from "next/link";
+// Step 2: the student checks every fact we extracted, then saves. Only saved,
+// confirmed facts reach the interviewer.
+
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, describeValue, Fact, fmtMinor } from "@/lib/api";
+import Shell from "@/components/Shell";
+import { api, ApiError, Fact, fmtMinor } from "@/lib/api";
+import { factLabel, factNote, factValue, groupFacts } from "@/lib/facts";
 
 type Funding = {
   currency: string;
@@ -12,18 +16,12 @@ type Funding = {
   net_required_minor: number;
   identified_funds_minor: number;
   gap_minor: number;
+  surplus_minor: number;
   status: string;
-  flags: string[];
   questions: string[];
   error?: string;
 };
 type Snapshot = { version: number | null; funding?: Funding; missing?: Record<string, string[]> };
-
-const STATUS_LABEL: Record<string, string> = {
-  covered_on_paper: "Arithmetic gap is zero (on paper)",
-  gap: "Arithmetic gap",
-  incomplete: "Incomplete: some amounts could not be counted",
-};
 
 export default function Prepare() {
   const router = useRouter();
@@ -48,12 +46,18 @@ export default function Prepare() {
     load();
   }, [load]);
 
-  async function setStatus(ref: string, status: "confirmed" | "rejected") {
-    await api(`/profile/facts/${encodeURIComponent(ref)}`, { method: "PATCH", json: { status } });
-    await load();
+  async function setStatus(f: Fact, status: "confirmed" | "rejected") {
+    if (f.confirmation_status === status) return;
+    setFacts((cur) => cur.map((x) => (x.ref === f.ref ? { ...x, confirmation_status: status } : x)));
+    try {
+      await api(`/profile/facts/${encodeURIComponent(f.ref)}`, { method: "PATCH", json: { status } });
+    } catch {
+      setError("Could not save that change. Check your connection and try again.");
+      await load();
+    }
   }
 
-  async function confirmSnapshot() {
+  async function save() {
     setBusy(true);
     setError("");
     try {
@@ -67,78 +71,118 @@ export default function Prepare() {
   }
 
   const pending = facts.filter((f) => f.confirmation_status === "proposed").length;
+  const checked = facts.length - pending;
   const missing = snap.missing?.uk_pre_cas ?? [];
-  const ready = snap.version !== null && missing.length === 0 && !snap.funding?.error;
+  const funding = snap.funding && !snap.funding.error ? snap.funding : null;
+  const ready = snap.version !== null && missing.length === 0 && funding !== null;
 
   return (
-    <main>
-      <h1>Confirm your facts</h1>
-      <p className="muted">
-        The interviewer only uses facts you confirm here. Check each one against its source. If a value
-        is wrong, reject it; never confirm a figure you cannot document.
-      </p>
-
-      <h2>Facts from your documents {pending > 0 && <span className="pill warn">{pending} to review</span>}</h2>
-      <div className="card">
-        {facts.map((f) => (
-          <div className="fact" key={f.ref}>
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <span className="muted">{f.field_name}</span>
-              <span className={`pill ${f.confirmation_status === "rejected" ? "bad" : f.confirmation_status === "proposed" ? "warn" : "good"}`}>
-                {f.confirmation_status}
-              </span>
-            </div>
-            <div className="value">{describeValue(f.value_json)}</div>
-            <div className="source">
-              Source: {f.source_label} — “{f.source_snippet}”
-            </div>
-            {f.confirmation_status === "proposed" && (
-              <div className="row">
-                <button onClick={() => setStatus(f.ref, "confirmed")}>Confirm</button>
-                <button className="secondary" onClick={() => setStatus(f.ref, "rejected")}>Reject</button>
-              </div>
-            )}
+    <Shell
+      step={2}
+      title="Check your facts"
+      intro="We found these details in your documents. Tap Correct if a detail is right, Wrong if it isn't. Your interviewer only uses details you mark as correct."
+    >
+      {facts.length > 0 && (
+        <div className="progress">
+          <div className="caption nums">{checked} of {facts.length} checked</div>
+          <div className="bar" aria-hidden="true">
+            {facts.map((f) => <i key={f.ref} data-done={f.confirmation_status !== "proposed"} />)}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
-      <button onClick={confirmSnapshot} disabled={busy || pending > 0}>
-        {pending > 0 ? "Review every fact first" : snap.version ? "Save a new version" : "Save confirmed facts"}
-      </button>
+      {groupFacts(facts).map(([group, rows]) => (
+        <section key={group}>
+          <p className="eyebrow">{group}</p>
+          {rows.map((f) => {
+            const st = f.confirmation_status;
+            const ok = st === "confirmed" || st === "corrected";
+            const note = factNote(f);
+            return (
+              <div className="card fact" key={f.ref}>
+                <div className="fact-head">
+                  <div>
+                    <div className="caption">{factLabel(f)}</div>
+                    <div className="fact-value">{factValue(f)}</div>
+                    {note && <div className="caption">{note}</div>}
+                  </div>
+                  {st === "proposed" && <span className="chip chip--outline">Not checked</span>}
+                </div>
+                <div className="caption">From {f.source_label}</div>
+                <div className="quote">“{f.source_snippet}”</div>
+                <div className="btn-row">
+                  <button type="button" className={`btn ${ok ? "btn-primary" : "btn-secondary"}`} aria-pressed={ok} onClick={() => setStatus(f, "confirmed")}>
+                    ✓ Correct
+                  </button>
+                  <button type="button" className={`btn ${st === "rejected" ? "btn-wrong" : "btn-secondary"}`} aria-pressed={st === "rejected"} onClick={() => setStatus(f, "rejected")}>
+                    ✗ Wrong
+                  </button>
+                </div>
+                {st === "rejected" && (
+                  <p className="caption" style={{ marginTop: 10 }}>
+                    Marked wrong, so the interviewer won&apos;t use it. Ask your counsellor to fix it, then mark it correct.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      ))}
+
+      {funding && (
+        <section className="card">
+          <h2>Your funding, added up</h2>
+          <table>
+            <tbody>
+              <tr><td>First-year costs</td><td>{fmtMinor(funding.required_minor, funding.currency)}</td></tr>
+              <tr><td>Scholarships</td><td>− {fmtMinor(funding.scholarships_deducted_minor, funding.currency)}</td></tr>
+              <tr><td>Amount to fund</td><td>{fmtMinor(funding.net_required_minor, funding.currency)}</td></tr>
+              <tr><td>Funds in your confirmed facts</td><td>{fmtMinor(funding.identified_funds_minor, funding.currency)}</td></tr>
+              <tr>
+                <td><strong>Difference</strong></td>
+                <td className={funding.gap_minor > 0 ? "bad" : "good"}>
+                  <strong>
+                    {funding.gap_minor > 0
+                      ? `${fmtMinor(funding.gap_minor, funding.currency)} short`
+                      : `Covered (+${fmtMinor(funding.surplus_minor, funding.currency)})`}
+                  </strong>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          {funding.questions.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <p><strong>Be ready to explain these in your interview:</strong></p>
+              <ul>{funding.questions.map((q) => <li key={q}>{q}</li>)}</ul>
+            </div>
+          )}
+          <details>
+            <summary>Why this estimate may differ</summary>
+            <p className="small">
+              It is added up from your confirmed figures only. A zero difference does not mean your funding is
+              sufficient for a visa; the source of the money, its timing and your documents still need review.
+            </p>
+          </details>
+        </section>
+      )}
+
+      {snap.version !== null && missing.length > 0 && (
+        <p className="error">Still needed before you can practise: {missing.join(", ")}.</p>
+      )}
       {error && <p className="error">{error}</p>}
 
-      {snap.funding && !snap.funding.error && (
-        <>
-          <h2>Funding arithmetic (version {snap.version})</h2>
-          <div className="card">
-            <table className="nums">
-              <tbody>
-                <tr><td>First-year costs</td><td>{fmtMinor(snap.funding.required_minor, snap.funding.currency)}</td></tr>
-                <tr><td>Scholarships subtracted</td><td>{fmtMinor(snap.funding.scholarships_deducted_minor, snap.funding.currency)}</td></tr>
-                <tr><td>Amount to fund</td><td>{fmtMinor(snap.funding.net_required_minor, snap.funding.currency)}</td></tr>
-                <tr><td>Funds in confirmed facts</td><td>{fmtMinor(snap.funding.identified_funds_minor, snap.funding.currency)}</td></tr>
-                <tr><td><strong>{STATUS_LABEL[snap.funding.status] ?? snap.funding.status}</strong></td><td><strong>{fmtMinor(snap.funding.gap_minor, snap.funding.currency)}</strong></td></tr>
-              </tbody>
-            </table>
-            <p className="muted">
-              Calculated from your confirmed figures only. A zero gap does not mean your funding is
-              sufficient for a visa; source, timing and documents still need review.
-            </p>
-            {snap.funding.questions.length > 0 && (
-              <>
-                <p><strong>Be ready to explain:</strong></p>
-                <ul>{snap.funding.questions.map((q) => <li key={q}>{q}</li>)}</ul>
-              </>
-            )}
-          </div>
-        </>
-      )}
-      {snap.version !== null && missing.length > 0 && (
-        <p className="error">Still needed before you can practise: {missing.join(", ")}</p>
-      )}
-      {ready && (
-        <p><Link href="/interview"><button>Continue to practice</button></Link></p>
-      )}
-    </main>
+      <div className="sticky-bar">
+        <div className="btn-row">
+          <button type="button" className="btn btn-secondary" onClick={save} disabled={busy || pending > 0 || facts.length === 0}>
+            {busy ? "Saving…" : "Save my facts"}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => router.push("/interview")} disabled={!ready}>
+            Continue →
+          </button>
+        </div>
+        {pending > 0 && <p className="caption center nums" style={{ margin: "8px 0 0" }}>{pending} {pending === 1 ? "fact" : "facts"} still unchecked</p>}
+        {pending === 0 && !ready && facts.length > 0 && <p className="caption center" style={{ margin: "8px 0 0" }}>Save your facts to continue</p>}
+      </div>
+    </Shell>
   );
 }

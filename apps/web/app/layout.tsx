@@ -1,8 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Nunito } from "next/font/google";
 import "./globals.css";
-
-const nunito = Nunito({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Interview Practice",
@@ -12,12 +9,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#fffaf3",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={nunito.variable} data-scroll-behavior="smooth">
+    <html lang="en" data-scroll-behavior="smooth">
       <body>{children}</body>
     </html>
   );

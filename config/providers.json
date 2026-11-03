@@ -1,9 +1,9 @@
 {
-  "_comment": "Interview providers offered to students. No secrets here: URLs and keys come from the env vars named below. A provider is offered only when enabled is true AND its required env vars are set. Order = order shown to students. This phase: ElevenLabs (voice) + HeyGen LiveAvatar (video) only; see docs/ELEVENLABS_LIVEAVATAR_FOCUS.md.",
+  "_comment": "Interview providers offered to students. No secrets here: URLs and keys come from the env vars named below. A provider is offered only when enabled is true AND its required env vars are set. Order = order shown to students. Labels and data_note reach the browser: never name a vendor in them. See docs/ELEVENLABS_LIVEAVATAR_FOCUS.md.",
   "providers": [
     {
       "id": "liveavatar_embed",
-      "label": "Video interviewer A",
+      "label": "Video interviewer",
       "vendor": "HeyGen LiveAvatar (embed)",
       "integration": "iframe_embed",
       "modality": "avatar",
@@ -16,7 +16,7 @@
       "aspect_ratio": "16 / 9",
       "clock_start": "on_interaction",
       "clock_fallback_ms": 20000,
-      "data_note": "Video stream. Your voice goes to HeyGen LiveAvatar.",
+      "data_note": "Video call. Your voice is sent to the AI service that runs the interviewer.",
       "capabilities": {
         "transcripts": false,
         "student_facts": false,
@@ -33,7 +33,7 @@
       "requires_env": [
         "ELEVENLABS_AGENT_ID"
       ],
-      "data_note": "Audio only, lower data use. Your voice and confirmed facts go to ElevenLabs.",
+      "data_note": "Audio only, lower data use. Your voice and confirmed details are sent to the AI service that runs the interviewer.",
       "capabilities": {
         "transcripts": false,
         "student_facts": true,

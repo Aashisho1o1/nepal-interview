@@ -112,11 +112,8 @@ export default function ElevenLabsStage({ sessionId, launch, onPhase, onClock, o
   }, []);
 
   return (
-    <div className="voice-stage" data-mode={mode} role="img" aria-label="Voice interviewer">
-      <div className="orb" />
-      <p className="voice-caption">
-        {mode === "connecting" ? "Connecting…" : mode === "speaking" ? "Interviewer is speaking" : "Your turn — speak naturally"}
-      </p>
+    <div className="voice-stage" role="img" aria-label="Voice interviewer">
+      <div className="orb" data-mode={mode} />
     </div>
   );
 }

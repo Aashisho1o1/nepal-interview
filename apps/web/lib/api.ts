@@ -50,25 +50,21 @@ export type Fact = {
 };
 
 export function fmtMinor(minor: number, currency: string) {
-  return `${currency} ${(minor / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${currency} ${(minor / 100).toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
+
+export const firstName = (me: Me | null) => me?.display_name.split(" ")[0] ?? "";
+
+export type SessionSummary = {
+  id: string;
+  mode: "avatar" | "voice";
+  status: string;
+  created_at: string;
+  end_reason: string | null;
+};
 
 export function fmtSeconds(s: number) {
   const m = Math.floor(s / 60);
   const r = Math.max(0, Math.floor(s % 60));
   return `${m}:${r.toString().padStart(2, "0")}`;
-}
-
-export function describeValue(v: unknown): string {
-  if (v === null || v === undefined) return "—";
-  if (typeof v !== "object") return String(v);
-  const o = v as Record<string, unknown>;
-  if ("amount" in o && "currency" in o) {
-    const extra = [o.period, o.available_by ? `available by ${o.available_by}` : o.kind === "loan" ? "availability date not confirmed" : null, o.already_deducted ? "already deducted from cost" : null]
-      .filter(Boolean)
-      .join(", ");
-    return `${o.label ?? ""}: ${o.currency} ${Number(o.amount).toLocaleString("en-US")}${extra ? ` (${extra})` : ""}`;
-  }
-  if ("annual_amount" in o) return `Sponsor income (${o.earner}): ${o.currency} ${Number(o.annual_amount).toLocaleString("en-US")} per year`;
-  return JSON.stringify(o);
 }

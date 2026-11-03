@@ -1,20 +1,22 @@
 "use client";
 
-// The interview page knows nothing about vendors. It lets the student pick an
-// interviewer (provider), asks the API to start a session, and renders whichever
-// stage matches the returned launch.kind. Clock, End, page-exit cleanup, and the move
-// to feedback are shared by every provider.
+// Step 3: pick an interviewer, start, talk, end. The page knows nothing about
+// vendors: the API returns a launch and the matching stage component renders it.
+// Clock, End button, page-exit cleanup and the move to feedback are shared.
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import Shell from "@/components/Shell";
 import { STAGES } from "@/components/stages";
-import { api, ApiError, fmtSeconds, Me } from "@/lib/api";
+import TierCards from "@/components/TierCards";
+import { api, ApiError, firstName, fmtSeconds, Me } from "@/lib/api";
+import { DATA_NOTE, DISCLAIMER } from "@/lib/copy";
 import { readMode } from "@/lib/mode";
 import { PHASE_TEXT, type Launch, type Phase, type ProviderInfo, type StageProps, type StartResp } from "@/lib/providers";
 
 const KEY_STORE = "ni-start-key";
 
-type Live = { id: string; launch: Launch; disclosure: string };
+type Live = { id: string; launch: Launch };
 
 export default function Interview() {
   const router = useRouter();
@@ -36,8 +38,7 @@ export default function Interview() {
       .then(([m, ps]) => {
         setMe(m);
         setProviders(ps);
-        // Preselect the style picked on the home page (video or voice), if one matches.
-        const wanted = readMode();
+        const wanted = readMode(); // the pick made on the home page
         setProviderId((cur) => cur || ps.find((p) => p.modality === wanted)?.id || ps[0]?.id || "");
       })
       .catch((e) => {
@@ -46,7 +47,7 @@ export default function Interview() {
       });
   }, [router]);
 
-  // Leaving the page ends the session server-side (settles billing, closes vendor media).
+  // Leaving the page ends the session server-side (settles credits, stops the vendor).
   useEffect(() => {
     const onHide = () => {
       const id = sessionRef.current;
@@ -60,12 +61,12 @@ export default function Interview() {
   }, []);
 
   const finish = useCallback(() => {
-      const id = sessionRef.current;
-      setLive(null); // unmounts the stage: disconnects LiveKit / removes the vendor iframe
-      setEndsAt(null);
-      sessionRef.current = null;
-      setPhase("completed");
-      if (id) router.push(`/sessions/${id}`);
+    const id = sessionRef.current;
+    setLive(null); // unmounts the stage: disconnects the call / removes the iframe
+    setEndsAt(null);
+    sessionRef.current = null;
+    setPhase("completed");
+    if (id) router.push(`/sessions/${id}`);
   }, [router]);
 
   const endNow = useCallback(
@@ -83,8 +84,8 @@ export default function Interview() {
 
   const remaining = endsAt && now ? (endsAt - now) / 1000 : null;
 
-  // Clock tick + deadline. The browser is the only thing that can stop the vendor
-  // stream, so the session ends exactly at the server-set time.
+  // The browser is the only thing that can stop the vendor stream, so the session
+  // ends exactly at the server-set time.
   useEffect(() => {
     if (!endsAt || !live) return;
     const t = setInterval(() => {
@@ -101,8 +102,7 @@ export default function Interview() {
     setLiveConflict(null);
     endedRef.current = false;
     setPhase("starting");
-    // One key per intended start, reused on retry/double-click so the server returns the
-    // same session (and the same vendor conversation) instead of reserving twice.
+    // One key per intended start, reused on retry so the server returns the same session.
     let key = sessionStorage.getItem(KEY_STORE);
     if (!key) {
       key = crypto.randomUUID();
@@ -116,7 +116,7 @@ export default function Interview() {
       });
       sessionStorage.removeItem(KEY_STORE);
       sessionRef.current = s.session_id;
-      setLive({ id: s.session_id, launch: s.launch, disclosure: s.disclosure });
+      setLive({ id: s.session_id, launch: s.launch });
       setPhase("connecting");
     } catch (e) {
       sessionStorage.removeItem(KEY_STORE);
@@ -134,37 +134,37 @@ export default function Interview() {
     setPhase("idle");
   }
 
-  const balanceFor = (p: ProviderInfo) =>
-    me ? fmtSeconds(me.balances[p.modality === "avatar" ? "premium_seconds" : "basic_seconds"].available) : "";
+  const minutesFor = (p: ProviderInfo) =>
+    me ? fmtSeconds(me.balances[p.modality === "avatar" ? "premium_seconds" : "basic_seconds"].available) : null;
+  const tierOff = (p: ProviderInfo) => (me ? (p.modality === "avatar" ? !me.video_available : !me.voice_available) : false);
+  const chosen = providers.find((p) => p.id === providerId);
   const Stage = live ? (STAGES[live.launch.kind] as ComponentType<StageProps<Launch>>) : null;
 
   return (
-    <main>
-      <h1>Your pre-CAS practice interview</h1>
+    <Shell
+      step={3}
+      width="narrow"
+      me={me}
+      title={live ? "Your practice interview" : me ? `Ready when you are, ${firstName(me)}.` : "Ready when you are."}
+      intro={!live && chosen && minutesFor(chosen) ? `You have ${minutesFor(chosen)} of ${chosen.modality === "avatar" ? "video" : "voice"} practice left.` : undefined}
+    >
       {!live && (
         <>
-          <p className="muted">
-            Five minutes and three questions with a fictional AI interviewer. It is not a university officer or UKVI,
-            and it does not predict any decision. Answer truthfully using your confirmed facts.
-          </p>
-          <div className="choices" role="radiogroup" aria-label="Interviewer">
-            {providers.map((p) => (
-              <label className="choice" key={p.id}>
-                <input type="radio" name="provider" checked={providerId === p.id} onChange={() => setProviderId(p.id)} />
-                <span>
-                  <strong>{p.label}</strong>
-                  <br />
-                  <span className="muted">
-                    {p.data_note} {me && `${balanceFor(p)} left.`}
-                    {p.capabilities.transcripts === false && " No scorecard for this one yet; you'll rate it instead."}
-                  </span>
-                </span>
-              </label>
-            ))}
-            {me && providers.length === 0 && <p className="error">No interviewer is available right now.</p>}
-          </div>
-          <button onClick={start} disabled={phase === "starting" || !me || !providerId} style={{ marginTop: 12 }}>
-            Start practice
+          <TierCards
+            options={providers.map((p) => ({ id: p.id, modality: p.modality, minutesLeft: minutesFor(p), disabled: tierOff(p) }))}
+            value={providerId || null}
+            onChange={setProviderId}
+          />
+          {me && providers.length === 0 && <p className="error" style={{ marginTop: 12 }}>No interviewer is available right now.</p>}
+          {chosen && chosen.capabilities.transcripts === false && (
+            <p className="notice" style={{ marginTop: 12 }}>
+              This interviewer doesn&apos;t give written feedback yet. Your session still counts, and you can rate it afterwards.
+            </p>
+          )}
+          <p className="caption" style={{ margin: "16px 0 6px" }}>{DATA_NOTE}</p>
+          <p className="caption" style={{ margin: "0 0 20px" }}>{DISCLAIMER}</p>
+          <button type="button" className="btn btn-primary btn-block" onClick={start} disabled={phase === "starting" || !me || !providerId || (chosen && tierOff(chosen))}>
+            {phase === "starting" ? "Starting…" : "Start practice"}
           </button>
         </>
       )}
@@ -172,29 +172,20 @@ export default function Interview() {
       {live && Stage && (
         <>
           <div className="stage-wrap">
-            <Stage
-              sessionId={live.id}
-              launch={live.launch}
-              onPhase={setPhase}
-              onClock={setEndsAt}
-              onNotice={setNotice}
-              onEnded={(reason) => void endNow(reason)}
-            />
-            <span className="badge">Fictional AI interviewer · practice</span>
-            {remaining !== null && <span className="clock">{fmtSeconds(Math.max(0, remaining))}</span>}
+            <Stage sessionId={live.id} launch={live.launch} onPhase={setPhase} onClock={setEndsAt} onNotice={setNotice} onEnded={(reason) => void endNow(reason)} />
+            <span className="chip left">Fictional AI · Practice</span>
+            {remaining !== null && <span className="chip right nums">{fmtSeconds(Math.max(0, remaining))}</span>}
           </div>
           <div className="state" aria-live="polite">{PHASE_TEXT[phase]}</div>
-          {notice && <p className="muted" role="status">{notice}</p>}
-          {live.disclosure && <p className="muted">{live.disclosure}</p>}
-          <button className="danger" onClick={() => void endNow()} style={{ width: "100%" }}>
-            End session
-          </button>
+          {notice && <p className="small center" role="status">{notice}</p>}
+          <p className="caption center" style={{ margin: "0 0 16px" }}>{DISCLAIMER}</p>
+          <button type="button" className="btn btn-danger btn-block" onClick={() => void endNow()}>End session</button>
         </>
       )}
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <p className="error" role="alert" style={{ marginTop: 12 }}>{error}</p>}
       {liveConflict && (
-        <button className="secondary" onClick={endOther}>End the other session</button>
+        <button type="button" className="btn btn-secondary" onClick={endOther} style={{ marginTop: 8 }}>End the other session</button>
       )}
-    </main>
+    </Shell>
   );
 }

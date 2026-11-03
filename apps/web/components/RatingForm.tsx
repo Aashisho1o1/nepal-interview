@@ -1,7 +1,7 @@
 "use client";
 
-// Same four questions after every session, whatever the provider, so interviewers
-// can be compared on the student's experience (see scripts/provider_comparison.py).
+// Same four questions after every session, whatever the interviewer, so the two
+// tiers can be compared on the student's experience.
 
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
@@ -16,14 +16,27 @@ export type Rating = {
 
 const SPEEDS: [Rating["reply_speed"], string][] = [
   ["instant", "Instant"],
-  ["slight_pause", "Slight pause, felt natural"],
+  ["slight_pause", "Slight pause"],
   ["noticeably_slow", "Noticeably slow"],
-  ["frustrating", "Frustratingly slow"],
+  ["frustrating", "Frustrating"],
 ];
+
+function Seg<T extends string | number | boolean>({ options, value, onPick, round }: { options: [T, string][]; value: T | undefined; onPick: (v: T) => void; round?: boolean }) {
+  return (
+    <div className="seg">
+      {options.map(([v, label]) => (
+        <button key={String(v)} type="button" className={round ? "round" : undefined} aria-pressed={value === v} onClick={() => onPick(v)}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function RatingForm({ sessionId, initial }: { sessionId: string; initial: Rating | null }) {
   const [r, setR] = useState<Partial<Rating>>(initial ?? {});
   const [saved, setSaved] = useState(Boolean(initial));
+  const [showComment, setShowComment] = useState(Boolean(initial?.comment));
   const [error, setError] = useState("");
   const complete =
     r.realism !== undefined && r.reply_speed !== undefined && r.audio_video_ok !== undefined && r.would_use_again !== undefined;
@@ -43,55 +56,41 @@ export default function RatingForm({ sessionId, initial }: { sessionId: string; 
     setR((cur) => ({ ...cur, ...patch }));
     setSaved(false);
   };
+  const yesNo: [boolean, string][] = [[true, "Yes"], [false, "No"]];
 
   return (
-    <form className="card stack" onSubmit={submit} aria-label="Rate this session">
-      <h2 style={{ marginTop: 0 }}>How did this interviewer feel?</h2>
-      <fieldset className="rating-row">
-        <legend>How much did it feel like a real interview? (1 = not at all, 5 = very)</legend>
-        <div className="row">
-          {[1, 2, 3, 4, 5].map((n) => (
-            <label key={n} className="pill-choice">
-              <input type="radio" name="realism" checked={r.realism === n} onChange={() => set({ realism: n })} /> {n}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <fieldset className="rating-row">
-        <legend>How quickly did the interviewer reply?</legend>
-        {SPEEDS.map(([v, label]) => (
-          <label key={v} className="pill-choice">
-            <input type="radio" name="speed" checked={r.reply_speed === v} onChange={() => set({ reply_speed: v })} /> {label}
-          </label>
-        ))}
-      </fieldset>
-      <fieldset className="rating-row">
-        <legend>Could you clearly hear (and see) the interviewer the whole time?</legend>
-        <div className="row">
-          <label className="pill-choice">
-            <input type="radio" name="av" checked={r.audio_video_ok === true} onChange={() => set({ audio_video_ok: true })} /> Yes
-          </label>
-          <label className="pill-choice">
-            <input type="radio" name="av" checked={r.audio_video_ok === false} onChange={() => set({ audio_video_ok: false })} /> No
-          </label>
-        </div>
-      </fieldset>
-      <fieldset className="rating-row">
-        <legend>Would you practise with this interviewer again before your real interview?</legend>
-        <div className="row">
-          <label className="pill-choice">
-            <input type="radio" name="again" checked={r.would_use_again === true} onChange={() => set({ would_use_again: true })} /> Yes
-          </label>
-          <label className="pill-choice">
-            <input type="radio" name="again" checked={r.would_use_again === false} onChange={() => set({ would_use_again: false })} /> No
-          </label>
-        </div>
-      </fieldset>
-      <div>
-        <label htmlFor="comment">Anything else? (optional)</label>
-        <input id="comment" maxLength={1000} value={r.comment ?? ""} onChange={(e) => set({ comment: e.target.value })} />
+    <form className="card" onSubmit={submit} aria-label="Rate this session">
+      <h2>How did it feel?</h2>
+      <div className="q">
+        <p>Did it feel like a real interview? <span className="caption">1 = not at all, 5 = very</span></p>
+        <Seg round options={[1, 2, 3, 4, 5].map((n) => [n, String(n)] as [number, string])} value={r.realism} onPick={(v) => set({ realism: v })} />
       </div>
-      <button type="submit" disabled={!complete}>{saved ? "Saved — thank you" : "Submit rating"}</button>
+      <div className="q">
+        <p>How fast were the replies?</p>
+        <Seg options={SPEEDS} value={r.reply_speed} onPick={(v) => set({ reply_speed: v })} />
+      </div>
+      <div className="q">
+        <p>Could you hear the interviewer clearly the whole time?</p>
+        <Seg options={yesNo} value={r.audio_video_ok} onPick={(v) => set({ audio_video_ok: v })} />
+      </div>
+      <div className="q">
+        <p>Would you practise with this interviewer again?</p>
+        <Seg options={yesNo} value={r.would_use_again} onPick={(v) => set({ would_use_again: v })} />
+      </div>
+      <div className="q">
+        {showComment ? (
+          <div className="field">
+            <label htmlFor="comment">Anything else?</label>
+            <textarea id="comment" maxLength={1000} value={r.comment ?? ""} onChange={(e) => set({ comment: e.target.value })} />
+          </div>
+        ) : (
+          <button type="button" className="btn btn-ghost" onClick={() => setShowComment(true)}>Add a comment (optional)</button>
+        )}
+      </div>
+      <button type="submit" className="btn btn-primary btn-block" disabled={!complete || saved}>
+        {saved ? "Thanks, saved" : "Submit rating"}
+      </button>
+      {!complete && <p className="caption center" style={{ margin: "8px 0 0" }}>Answer the questions above to submit.</p>}
       {error && <p className="error">{error}</p>}
     </form>
   );
