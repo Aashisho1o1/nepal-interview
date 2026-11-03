@@ -191,15 +191,18 @@ td:last-child { text-align: right; padding-left: 12px; font-variant-numeric: tab
 .demo { margin: 0 0 20px; }
 .bubble { display: inline-block; max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 15px; line-height: 1.4; }
 .bubble.q { background: var(--surface-2); border-bottom-left-radius: 6px; }
-.bubble.a { border: 1px solid var(--brand); border-bottom-right-radius: 6px; margin-top: 12px; }
+.bubble.a { border: 1px solid var(--brand); border-bottom-right-radius: 6px; }
 .demo .a-wrap { text-align: right; }
+.demo .who { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 4px; }
+.demo .a-wrap .who { margin-top: 14px; }
+.lead strong { color: var(--ink); font-weight: 600; }
 .demo .ok { color: var(--good); font-size: 14px; font-weight: 500; margin: 12px 0 0; }
 .section { max-width: 640px; margin: 0 auto 48px; }
 .rows > div { display: grid; grid-template-columns: 36px 1fr; gap: 0 8px; padding: 16px 0; border-top: 1px solid var(--line); }
 .rows > div:first-child { border-top: 0; }
 .rows .n { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 4px; }
 .rows h2 { margin-bottom: 2px; }
-.signin { max-width: 440px; margin: 0 auto 48px; scroll-margin-top: 72px; }
+.signin { max-width: 440px; margin: 8px auto 40px; scroll-margin-top: 72px; }
 .footer { max-width: 640px; margin: 24px auto 0; padding-top: 24px; border-top: 1px solid var(--line); text-align: center; }
 
 /* "Have a code?" */

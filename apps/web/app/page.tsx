@@ -1,6 +1,7 @@
 "use client";
 
-// Home. Signed out: what this is, then one form to create an account or sign in.
+// Home. Signed out: what this is, how it works, example feedback, then one form at
+// the bottom to create an account or sign in.
 // Video or voice is chosen later, on the practice page. Signed in: where to pick up.
 
 import Link from "next/link";
@@ -109,52 +110,24 @@ export default function HomePage() {
           <section className="hero">
             <span className="chip chip--outline">UK pre-CAS interview practice · Early access</span>
             <h1 className="display">Practise your pre-CAS interview before the real one.</h1>
-            <p className="lead">Talk with an AI interviewer by voice or video, and get feedback after every session.</p>
+            <p className="lead">
+              Practise with an AI interviewer on a <strong>video call</strong> or an <strong>audio call</strong>, and get feedback
+              after every session.
+            </p>
             <button type="button" className="btn btn-primary" onClick={startFree}>Start practising free</button>
             <div className="card demo" aria-label="Example of a practice exchange" style={{ marginTop: 28 }}>
-              <div><span className="bubble q">Why did you choose this course?</span></div>
-              <div className="a-wrap"><span className="bubble a">I chose MSc Data Science because its machine learning modules build on my…</span></div>
+              <div>
+                <span className="who">Visa interviewer (AI)</span>
+                <span className="bubble q">Why did you choose this course?</span>
+              </div>
+              <div className="a-wrap">
+                <span className="who">Visa applicant (you)</span>
+                <span className="bubble a">I chose MSc Data Science because its machine learning modules build on my…</span>
+              </div>
               <p className="ok">✓ Clear and specific</p>
             </div>
           </section>
 
-          <form className="card signin" id="signin" onSubmit={submit}>
-            <h2>{signup ? "Create your free account" : "Welcome back"}</h2>
-            {signup && (
-              <div className="field">
-                <label htmlFor="name">Your name</label>
-                <input id="name" type="text" autoComplete="name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} required />
-              </div>
-            )}
-            <div className="field">
-              <label htmlFor="email">Email</label>
-              <input id="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label htmlFor="password">Password</label>
-              <input
-                id="password"
-                type="password"
-                autoComplete={signup ? "new-password" : "current-password"}
-                minLength={signup ? 8 : undefined}
-                aria-describedby={signup ? "pw-hint" : undefined}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-              {signup && <p id="pw-hint" className="caption" style={{ margin: "6px 0 0" }}>At least 8 characters.</p>}
-            </div>
-            <button type="submit" className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16 }}>
-              {busy ? (signup ? "Creating your account…" : "Signing in…") : signup ? "Create account" : "Sign in"}
-            </button>
-            {error && <p className="error" role="alert" style={{ marginTop: 10 }}>{error}</p>}
-            <p className="caption" style={{ marginTop: 12 }}>
-              {signup ? "Free to start. No card needed. Already have an account?" : "New here?"}{" "}
-              <button type="button" className="btn btn-ghost" onClick={switchMode}>
-                {signup ? "Sign in" : "Create a free account"}
-              </button>
-            </p>
-          </form>
         </>
       )}
 
@@ -184,6 +157,46 @@ export default function HomePage() {
         </div>
         <p className="caption">Example feedback from a practice session.</p>
       </section>
+
+      {!home && (
+            <form className="card signin" id="signin" onSubmit={submit}>
+              <h2>{signup ? "Create your free account" : "Welcome back"}</h2>
+              {signup && (
+                <div className="field">
+                  <label htmlFor="name">Your name</label>
+                  <input id="name" type="text" autoComplete="name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} required />
+                </div>
+              )}
+              <div className="field">
+                <label htmlFor="email">Email</label>
+                <input id="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              </div>
+              <div className="field">
+                <label htmlFor="password">Password</label>
+                <input
+                  id="password"
+                  type="password"
+                  autoComplete={signup ? "new-password" : "current-password"}
+                  minLength={signup ? 8 : undefined}
+                  aria-describedby={signup ? "pw-hint" : undefined}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                {signup && <p id="pw-hint" className="caption" style={{ margin: "6px 0 0" }}>At least 8 characters.</p>}
+              </div>
+              <button type="submit" className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16 }}>
+                {busy ? (signup ? "Creating your account…" : "Signing in…") : signup ? "Create account" : "Sign in"}
+              </button>
+              {error && <p className="error" role="alert" style={{ marginTop: 10 }}>{error}</p>}
+              <p className="caption" style={{ marginTop: 12 }}>
+                {signup ? "Free to start. No card needed. Already have an account?" : "New here?"}{" "}
+                <button type="button" className="btn btn-ghost" onClick={switchMode}>
+                  {signup ? "Sign in" : "Create a free account"}
+                </button>
+              </p>
+            </form>
+      )}
 
       <footer className="footer">
         <p className="caption">{DISCLAIMER}</p>
