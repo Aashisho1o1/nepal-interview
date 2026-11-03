@@ -402,6 +402,26 @@ async def test_signup_rejects_duplicates_bad_input_and_foreign_origins(make_env)
         assert (await signup(foreign, email="d@example.test")).status_code == 403
 
 
+async def test_same_origin_requests_pass_without_configuring_the_address(make_env):
+    """The deployed site's address needn't be in ALLOWED_ORIGINS: the proxy reports the
+    host the browser opened, and the Origin must match it."""
+    env = await make_env()  # ALLOWED_ORIGINS is only http://test
+    site = "practice.up.railway.app"
+
+    async def try_signup(origin: str, forwarded_host: str, email: str) -> int:
+        c = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=env.app),
+            base_url="http://api.railway.internal:8000",
+            headers={"origin": origin, "x-forwarded-host": forwarded_host},
+        )
+        async with c:
+            return (await signup(c, email=email)).status_code
+
+    assert await try_signup(f"https://{site}", site, "a@example.test") == 200
+    assert await try_signup("https://evil.test", site, "b@example.test") == 403
+    assert await try_signup(f"https://{site}.evil.test", site, "c@example.test") == 403
+
+
 async def test_signup_is_rate_limited_per_network_and_can_be_closed(make_env):
     env = await make_env()
     async with env.client() as c:

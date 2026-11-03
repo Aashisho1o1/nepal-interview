@@ -56,8 +56,8 @@ export default defineRailway((ctx) => {
     env: {
       ...server,
       PORT: API_PORT,
-      // The browser's Origin is the website's public address.
-      ALLOWED_ORIGINS: "https://${{web.RAILWAY_PUBLIC_DOMAIN}}",
+      // No ALLOWED_ORIGINS needed: the API accepts requests whose Origin matches the
+      // address the visitor opened, which the website's proxy reports.
     },
   });
 

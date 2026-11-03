@@ -1,40 +1,38 @@
 "use client";
 
-// Home. Signed out: what this is, pick an interviewer, sign up or sign in. Signed in: a resume
-// card and the same choice, no sales page. The pick is remembered so the interview
-// page preselects it.
+// Home. Signed out: what this is, then one form to create an account or sign in.
+// Video or voice is chosen later, on the practice page. Signed in: where to pick up.
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
-import TierCards from "@/components/TierCards";
-import { api, ApiError, firstName, fmtSeconds, Fact, Me, SessionSummary } from "@/lib/api";
-import { DISCLAIMER, END_REASON, STATUS, TIERS } from "@/lib/copy";
-import { saveMode, type Mode } from "@/lib/mode";
+import { api, ApiError, firstName, Fact, Me, SessionSummary } from "@/lib/api";
+import { DISCLAIMER, END_REASON, STATUS } from "@/lib/copy";
 
 type Snapshot = { version: number | null; funding?: { error?: string }; missing?: Record<string, string[]> };
 type Home = { me: Me; unchecked: number; ready: boolean; last: SessionSummary | null };
 
+const isReady = (snap: Snapshot) =>
+  snap.version !== null && (snap.missing?.uk_pre_cas ?? []).length === 0 && !snap.funding?.error;
+
 const STEPS: [string, string][] = [
-  ["Pick your interviewer", "Video or voice, whichever suits you today."],
-  ["Check your facts", "Confirm the details from your documents. Fix anything wrong."],
-  ["Have a conversation", "Five minutes, three questions, out loud, like the real day."],
+  ["Create your account", "Free to start. No card needed."],
+  ["Check your facts", "Confirm the details your interviewer will use."],
+  ["Have a conversation", "Video or voice. Five minutes, three questions, out loud, like the real day."],
   ["See your feedback", "What went well and what to practise, in your own words."],
 ];
 
 export default function HomePage() {
   const router = useRouter();
   const [home, setHome] = useState<Home | null | undefined>(undefined); // undefined = loading
-  const [mode, setMode] = useState<Mode | null>(null);
   const [account, setAccount] = useState<"signup" | "signin">("signup");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const emailRef = useRef<HTMLInputElement>(null);
-  const nameRef = useRef<HTMLInputElement>(null);
+  const signup = account === "signup";
 
   useEffect(() => {
     api<Me>("/me")
@@ -45,8 +43,7 @@ export default function HomePage() {
           api<SessionSummary[]>("/sessions"),
         ]);
         const unchecked = facts.filter((f) => f.confirmation_status === "proposed").length;
-        const ready = snap.version !== null && (snap.missing?.uk_pre_cas ?? []).length === 0 && !snap.funding?.error;
-        setHome({ me, unchecked, ready, last: sessions.find((s) => s.status !== "created" && s.status !== "active") ?? null });
+        setHome({ me, unchecked, ready: isReady(snap), last: sessions.find((s) => s.status !== "created" && s.status !== "active") ?? null });
       })
       .catch(() => setHome(null));
   }, []);
@@ -64,54 +61,40 @@ export default function HomePage() {
     };
   }, []);
 
-  function choose(m: Mode) {
-    setMode(m);
-    saveMode(m);
-    if (home) {
-      setBusy(true);
-      router.push(home.ready ? "/interview" : "/prepare");
-      return;
-    }
-    document.getElementById("signin")?.scrollIntoView({ block: "center" });
-    (account === "signup" ? nameRef : emailRef).current?.focus({ preventScroll: true });
-  }
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
-      if (account === "signup") {
+      if (signup) {
         await api("/auth/signup", { method: "POST", json: { name, email, password } });
         router.push("/prepare"); // a new account always checks its facts first
         return;
       }
       await api("/auth/login", { method: "POST", json: { email, password } });
       const snap = await api<Snapshot>("/profile/snapshot").catch(() => ({ version: null }) as Snapshot);
-      const ready = snap.version !== null && (snap.missing?.uk_pre_cas ?? []).length === 0 && !snap.funding?.error;
-      router.push(ready ? "/interview" : "/prepare");
+      router.push(isReady(snap) ? "/interview" : "/prepare");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : account === "signup" ? "Could not create your account." : "Could not sign in.");
+      setError(err instanceof ApiError ? err.message : signup ? "Could not create your account." : "Could not sign in.");
       setBusy(false);
     }
   }
 
-  const me = home?.me ?? null;
-  const tiers = (
-    <TierCards
-      options={(["avatar", "voice"] as const).map((m) => ({
-        id: m,
-        modality: m,
-        minutesLeft: me ? fmtSeconds(me.balances[m === "avatar" ? "premium_seconds" : "basic_seconds"].available) : null,
-        disabled: me ? (m === "avatar" ? !me.video_available : !me.voice_available) : false,
-      }))}
-      value={mode}
-      onChange={(id) => choose(id as Mode)}
-    />
-  );
+  // Scrolls to the form in sign-up mode. Not a "#signin" link: that hash means sign in.
+  function startFree() {
+    setAccount("signup");
+    setError("");
+    document.getElementById("signin")?.scrollIntoView({ block: "start" });
+    setTimeout(() => document.getElementById("name")?.focus({ preventScroll: true }), 0);
+  }
+
+  function switchMode() {
+    setAccount(signup ? "signin" : "signup");
+    setError("");
+  }
 
   return (
-    <Shell width="wide" me={home === undefined ? undefined : me}>
+    <Shell width="wide" me={home === undefined ? undefined : (home?.me ?? null)}>
       {home ? (
         <section className="section cards">
           <h1>Welcome back, {firstName(home.me)}.</h1>
@@ -125,12 +108,11 @@ export default function HomePage() {
             ) : (
               <>
                 <h2>Ready for another session?</h2>
-                <p className="small">Pick an interviewer below, or jump straight back in.</p>
+                <p className="small">Pick video or voice on the next page.</p>
                 <Link href="/interview" className="btn btn-primary">Practise again</Link>
               </>
             )}
           </div>
-          {tiers}
           {home.last && (
             <p className="small" style={{ marginTop: 16 }}>
               Last session: <span className="nums">{new Date(home.last.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span> ·{" "}
@@ -144,71 +126,52 @@ export default function HomePage() {
           <section className="hero">
             <span className="chip chip--outline">UK pre-CAS interview practice · Early access</span>
             <h1 className="display">Practise your pre-CAS interview before the real one.</h1>
-            <p className="lead">Talk with an AI interviewer by voice or video. Built on your own documents, with feedback after every session.</p>
-            <div className="card demo" aria-label="Example of a practice exchange">
+            <p className="lead">Talk with an AI interviewer by voice or video, and get feedback after every session.</p>
+            <button type="button" className="btn btn-primary" onClick={startFree}>Start practising free</button>
+            <div className="card demo" aria-label="Example of a practice exchange" style={{ marginTop: 28 }}>
               <div><span className="bubble q">Why did you choose this course?</span></div>
               <div className="a-wrap"><span className="bubble a">I chose MSc Data Science because its machine learning modules build on my…</span></div>
               <p className="ok">✓ Clear and specific</p>
             </div>
           </section>
 
-          <section className="section cards" id="choose">
-            <p className="eyebrow">Choose your interviewer</p>
-            <h2>Who would you like to talk to?</h2>
-            {tiers}
-            <form className="card signin" id="signin" onSubmit={submit}>
-              <h2>{account === "signup" ? "Create your free account" : "Welcome back"}</h2>
-              {mode ? (
-                <p className="chips" style={{ marginBottom: 14 }}>
-                  <span className="chip">You picked: {TIERS[mode].title}</span>
-                  <button type="button" className="btn btn-ghost" onClick={() => setMode(null)}>change</button>
-                </p>
-              ) : (
-                <p className="small">Pick an interviewer above, then {account === "signup" ? "create your account" : "sign in"}.</p>
-              )}
-              {account === "signup" && (
-                <div className="field">
-                  <label htmlFor="name">Your name</label>
-                  <input id="name" ref={nameRef} type="text" autoComplete="name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} required />
-                </div>
-              )}
+          <form className="card signin" id="signin" onSubmit={submit}>
+            <h2>{signup ? "Create your free account" : "Welcome back"}</h2>
+            {signup && (
               <div className="field">
-                <label htmlFor="email">Email</label>
-                <input id="email" ref={emailRef} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                <label htmlFor="name">Your name</label>
+                <input id="name" type="text" autoComplete="name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} required />
               </div>
-              <div className="field">
-                <label htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  type="password"
-                  autoComplete={account === "signup" ? "new-password" : "current-password"}
-                  minLength={account === "signup" ? 8 : undefined}
-                  aria-describedby={account === "signup" ? "pw-hint" : undefined}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-                {account === "signup" && <p id="pw-hint" className="caption" style={{ margin: "6px 0 0" }}>At least 8 characters.</p>}
-              </div>
-              <button type="submit" className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16 }}>
-                {busy ? (account === "signup" ? "Creating your account…" : "Signing in…") : account === "signup" ? "Create account" : "Sign in"}
+            )}
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <input id="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                autoComplete={signup ? "new-password" : "current-password"}
+                minLength={signup ? 8 : undefined}
+                aria-describedby={signup ? "pw-hint" : undefined}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              {signup && <p id="pw-hint" className="caption" style={{ margin: "6px 0 0" }}>At least 8 characters.</p>}
+            </div>
+            <button type="submit" className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16 }}>
+              {busy ? (signup ? "Creating your account…" : "Signing in…") : signup ? "Create account" : "Sign in"}
+            </button>
+            {error && <p className="error" role="alert" style={{ marginTop: 10 }}>{error}</p>}
+            <p className="caption" style={{ marginTop: 12 }}>
+              {signup ? "Free practice time to start. No card needed. Already have an account?" : "New here?"}{" "}
+              <button type="button" className="btn btn-ghost" onClick={switchMode}>
+                {signup ? "Sign in" : "Create a free account"}
               </button>
-              {error && <p className="error" role="alert" style={{ marginTop: 10 }}>{error}</p>}
-              <p className="caption" style={{ marginTop: 12 }}>
-                {account === "signup" ? "Free practice time to start. No card needed. Already have an account?" : "New here?"}{" "}
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    setAccount(account === "signup" ? "signin" : "signup");
-                    setError("");
-                  }}
-                >
-                  {account === "signup" ? "Sign in" : "Create a free account"}
-                </button>
-              </p>
-            </form>
-          </section>
+            </p>
+          </form>
         </>
       )}
 

@@ -13,6 +13,7 @@ import secrets
 import time
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
 
@@ -73,11 +74,21 @@ def client_ip(request: Request) -> str:
 
 
 def check_origin(request: Request, allowed: tuple[str, ...]) -> None:
-    """Reject state-changing browser requests from other origins (CSRF defence in depth
-    alongside SameSite=Lax)."""
+    """Reject state-changing browser requests from other sites (CSRF defence in depth
+    alongside SameSite=Lax).
+
+    Same-origin requests pass without configuration: the browser's Origin must name the
+    host the browser actually requested. The website's proxy (and Vercel's edge) put that
+    host in X-Forwarded-Host, overwriting anything a client sent. ALLOWED_ORIGINS adds
+    extra origins on top."""
     origin = request.headers.get("origin")
-    if origin is not None and origin not in allowed:
-        raise HTTPException(403, "origin not allowed")
+    if origin is None or origin in allowed:
+        return
+    requested = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    requested = requested.split(",")[0].strip().lower()
+    if requested and urlsplit(origin).netloc.lower() == requested:
+        return
+    raise HTTPException(403, "origin not allowed")
 
 
 async def current_student(request: Request) -> dict:

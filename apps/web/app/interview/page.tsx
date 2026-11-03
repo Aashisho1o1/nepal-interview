@@ -11,7 +11,6 @@ import { STAGES } from "@/components/stages";
 import TierCards from "@/components/TierCards";
 import { api, ApiError, firstName, fmtSeconds, Me } from "@/lib/api";
 import { DATA_NOTE, DISCLAIMER } from "@/lib/copy";
-import { readMode } from "@/lib/mode";
 import { PHASE_TEXT, type Launch, type Phase, type ProviderInfo, type StageProps, type StartResp } from "@/lib/providers";
 
 const KEY_STORE = "ni-start-key";
@@ -38,8 +37,7 @@ export default function Interview() {
       .then(([m, ps]) => {
         setMe(m);
         setProviders(ps);
-        const wanted = readMode(); // the pick made on the home page
-        setProviderId((cur) => cur || ps.find((p) => p.modality === wanted)?.id || ps[0]?.id || "");
+        setProviderId((cur) => cur || ps[0]?.id || "");
       })
       .catch((e) => {
         if (e instanceof ApiError && e.status === 401) router.push("/");
