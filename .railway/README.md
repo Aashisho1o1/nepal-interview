@@ -38,8 +38,14 @@ redeploys the services whose watched paths changed.
 
    ```bash
    railway ssh --service api
+   export $(tr '\0' '\n' < /proc/1/environ | grep -E '^(PATH|DATABASE_URL|PYTHONPATH)=')
    SEED_PASSWORD='choose-one' python -m interview_api.seed
    ```
+
+   The `export` line is needed in every SSH session: the shell doesn't load the
+   server's environment, so `python` and the database settings are missing without it.
+   Promo codes are created the same way (`python -m interview_api.plans ...`, see the
+   main README).
 
 7. Open the `web` address and sign in.
 

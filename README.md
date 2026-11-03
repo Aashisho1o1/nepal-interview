@@ -110,7 +110,8 @@ python -m interview_api.plans disable LEEDS2027
 
 Only a hash of each code is stored, so keep the code itself. Wrong codes are limited
 to five an hour per student and per network. On Railway, run these inside the API
-container (`railway ssh --service api`).
+container (`railway ssh --service api`), after loading the server's environment:
+`export $(tr '\0' '\n' < /proc/1/environ | grep -E '^(PATH|DATABASE_URL|PYTHONPATH)=')`.
 
 ## Before any paid use
 
