@@ -1,13 +1,19 @@
 "use client";
 
-// Every page shares this header; inner pages add the four-step stepper and a title.
+// Every page shares this header; inner pages add the four-step navigation and a title.
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, firstName, type Me } from "@/lib/api";
 
-const STEPS = ["Your account", "About you", "Practise", "Feedback"];
+// [label, where the step lives]. Feedback belongs to a session, so it's only shown.
+const STEPS: [string, string | null][] = [
+  ["Your account", "/"],
+  ["About you", "/prepare"],
+  ["Practise", "/interview"],
+  ["Feedback", null],
+];
 
 type Props = {
   step?: 1 | 2 | 3 | 4;
@@ -15,10 +21,11 @@ type Props = {
   intro?: React.ReactNode;
   width?: "wide" | "page" | "narrow";
   me?: Me | null; // pass it when the page already fetched it
+  locked?: boolean; // during a live call: no leaving by the step links
   children: React.ReactNode;
 };
 
-export default function Shell({ step, title, intro, width = "page", me: given, children }: Props) {
+export default function Shell({ step, title, intro, width = "page", me: given, locked = false, children }: Props) {
   const router = useRouter();
   const [fetched, setFetched] = useState<Me | null>(null);
   const me = given === undefined ? fetched : given;
@@ -56,12 +63,26 @@ export default function Shell({ step, title, intro, width = "page", me: given, c
       </header>
       <main className={width === "page" ? undefined : width}>
         {step && (
-          <div className="stepper" aria-label={`Step ${step} of 4`}>
-            <div className="stepper-label">Step {step} of 4 · {STEPS[step - 1]}</div>
-            <div className="bar" aria-hidden="true">
-              {STEPS.map((s, i) => <i key={s} data-done={i < step} />)}
+          <nav className="stepper" aria-label="Steps">
+            <div className="stepper-top">
+              {step > 1 && !locked ? (
+                <Link href={STEPS[step - 2][1] ?? "/"} className="back">← {STEPS[step - 2][0]}</Link>
+              ) : (
+                <span />
+              )}
+              <span>Step {step} of 4</span>
             </div>
-          </div>
+            <ol className="steps">
+              {STEPS.map(([label, href], i) => {
+                const props = { "data-done": i < step, "aria-current": i === step - 1 ? ("step" as const) : undefined };
+                return (
+                  <li key={label}>
+                    {href && !locked && i !== step - 1 ? <Link href={href} {...props}>{label}</Link> : <span {...props}>{label}</span>}
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
         )}
         {title && <h1>{title}</h1>}
         {intro && <p className="intro">{intro}</p>}

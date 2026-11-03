@@ -201,7 +201,7 @@ export default function SessionPage() {
 
       {ended && session.status !== "failed" && <RatingForm sessionId={id} initial={data.rating} />}
       <p className="caption center" style={{ marginTop: 20 }}>{DISCLAIMER}</p>
-      <p className="center small"><Link href="/interview">Practise again</Link> · <Link href="/prepare">Your facts</Link></p>
+      <p className="center small"><Link href="/interview">Practise again</Link> · <Link href="/prepare">Your details</Link></p>
     </Shell>
   );
 }

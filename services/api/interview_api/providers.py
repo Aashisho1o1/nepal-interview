@@ -311,6 +311,10 @@ def load_registry(
             continue
         providers[pid] = prov
         order.append(pid)
+    # Warnings, not info: hosts print them with no logging setup, so a missing setting
+    # shows in the deploy logs instead of only as "No interviewer is available".
     for pid, why in disabled.items():
-        log.info("provider %s not offered: %s", pid, why)
+        log.warning("provider %s not offered: %s", pid, why)
+    if not providers:
+        log.warning("no interviewer is configured: students will see none")
     return ProviderRegistry(providers, order, disabled)

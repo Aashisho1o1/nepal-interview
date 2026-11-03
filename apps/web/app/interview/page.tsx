@@ -158,6 +158,7 @@ export default function Interview() {
       step={3}
       width="narrow"
       me={me}
+      locked={live !== null}
       title={live ? "Your practice interview" : me ? `Ready when you are, ${firstName(me)}.` : "Ready when you are."}
       intro={
         !live && chosen
