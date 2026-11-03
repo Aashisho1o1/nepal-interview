@@ -36,7 +36,12 @@ async def seed(
         )
         uid = (await cur.fetchone())["id"]
         return await provision_student(
-            conn, uid, name, entitlements or SYNTHETIC_ENTITLEMENTS, "synthetic-test-v1"
+            conn,
+            uid,
+            name,
+            entitlements or SYNTHETIC_ENTITLEMENTS,
+            "synthetic-test-v1",
+            example_facts=True,
         )
 
 

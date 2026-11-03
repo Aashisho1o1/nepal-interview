@@ -21,9 +21,11 @@ tests/                           pytest, Postgres-backed
 
 ## How a session works
 
-1. The student signs in (HttpOnly cookie) and confirms each proposed fact against its
-   source. Only confirmed facts enter a versioned snapshot; funding is computed from it
-   with `Decimal`, never by the interviewer.
+1. The student signs up or signs in (HttpOnly cookie). On "About you" they can give
+   five quick details, a full bio, or nothing at all (`PUT /api/profile/details`).
+   Their details enter a versioned snapshot; funding is computed from it with
+   `Decimal`, never by the interviewer. Missing details reach the interviewer as
+   "not provided", and it asks about them.
 2. `POST /api/sessions` with an `Idempotency-Key` reserves the full session length from
    the tier's credit bucket (one live session per student, enforced by the database) and
    asks the chosen provider for a launch: a per-session ElevenLabs token plus dynamic
@@ -55,7 +57,7 @@ cd apps/web && cp .env.example .env.local && npm ci && npm run dev
 ```
 
 Open http://localhost:3000 and create an account, or sign in as `student@synthetic.test`. The seeded student
-is synthetic (Example University, GBP figures); confirm the facts, then practise.
+is synthetic: its "About you" form starts filled with example details.
 
 Paste `interviewer/officer_miller_prompt.md` into the ElevenLabs agent; the app sends
 the `{{variables}}` it references on every session.

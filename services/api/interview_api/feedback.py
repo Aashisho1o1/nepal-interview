@@ -8,7 +8,7 @@ import math
 
 from psycopg.types.json import Jsonb
 
-from interview_core.funding import compute_funding
+from interview_core.funding import empty_funding, funding_or_none
 from interview_core.grading import OpenAIChatGrader, RulesGrader, grade_with_repair, make_context
 from interview_core.scorecard import ScorecardError, TurnRecord
 
@@ -57,7 +57,7 @@ async def grade_session(pool, s: Settings, session_id) -> dict:
         ]
 
     snapshot = sess["confirmed_facts_json"]
-    funding = compute_funding(snapshot)
+    funding = funding_or_none(snapshot) or empty_funding()
     end = sess["ended_at"] or sess["practice_ends_at"]
     duration_ms = (
         math.ceil((end - sess["media_ready_at"]).total_seconds() * 1000)

@@ -1,8 +1,8 @@
 """Creating a student: open sign-up and the seed script share this.
 
-Students can't add their own documents yet, so every new profile starts from the
-example applicant's details (marked synthetic) with the student's own name. They
-confirm each one before practising, exactly as they would real extracted facts.
+A new account starts with only its name. Students add the rest on the "About you"
+page, or practise without it. The demo account (seed script) also gets the example
+applicant's facts, so its form starts filled in.
 """
 
 from __future__ import annotations
@@ -17,18 +17,24 @@ ENTITLEMENT_DAYS = 30
 
 
 async def provision_student(
-    conn, user_id, name: str, entitlements: dict[str, int], package: str
+    conn,
+    user_id,
+    name: str,
+    entitlements: dict[str, int],
+    package: str,
+    *,
+    example_facts: bool = False,
 ) -> str:
     """Profile, starting facts and practice time for `user_id`. Safe to re-run: existing
     facts and entitlements are left alone. Returns the profile id."""
     cur = await conn.execute(
         """INSERT INTO student_profiles (user_id, display_name, country_track, is_synthetic)
-           VALUES (%s,%s,'uk_pre_cas',true)
+           VALUES (%s,%s,'uk_pre_cas',%s)
            ON CONFLICT (user_id) DO UPDATE SET display_name=EXCLUDED.display_name RETURNING id""",
-        (user_id, name),
+        (user_id, name, example_facts),
     )
     sid = (await cur.fetchone())["id"]
-    for ref, field, value, label, snippet in SYNTHETIC_FACTS:
+    for ref, field, value, label, snippet in SYNTHETIC_FACTS if example_facts else ():
         if field == "student.full_name":
             value, label, snippet = name, "Your account", f"Name: {name}"
         await conn.execute(

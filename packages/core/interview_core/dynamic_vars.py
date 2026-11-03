@@ -40,6 +40,17 @@ def _intake(v: Any) -> str:
         return _text(v)
 
 
+def _yearly_income(facts: dict[str, Any]) -> str:
+    v = first_value(facts, "funding.sponsor_income")
+    if not isinstance(v, dict) or not v.get("annual_amount"):
+        return NOT_PROVIDED
+    try:
+        amount = f"{float(str(v['annual_amount']).replace(',', '')):,.0f}"
+    except ValueError:
+        return NOT_PROVIDED
+    return f"{str(v.get('currency') or '').upper()} {amount} per year".strip()
+
+
 def build_dynamic_variables(
     *,
     session_id: str,
@@ -57,6 +68,9 @@ def build_dynamic_variables(
         "course": _text(first_value(facts, "program.course")),
         "intake": _intake(first_value(facts, "program.start_date")),
         # Pre-CAS happens before a CAS is issued; never ask the student for one.
+        "home_country": _text(first_value(facts, "student.home_country")),
+        # Reported as given; it is not savings and is never used in funding arithmetic.
+        "family_income": _yearly_income(facts),
         "cas_status": _text(first_value(facts, "uk.cas_status", "not yet issued")),
         "funding_summary": (
             " ".join(describe_for_interviewer(funding).split()) if funding else NOT_PROVIDED

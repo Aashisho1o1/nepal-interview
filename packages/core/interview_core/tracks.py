@@ -44,21 +44,23 @@ UK_PRE_CAS = TrackSpec(
     id="uk_pre_cas",
     label="UK pre-CAS credibility interview practice",
     stage="Practice for a UK university's own credibility interview, held before it issues a CAS.",
-    required_facts=(
+    # Nothing is required: students can practise straight away, give five quick
+    # details, or fill the full bio. The interviewer asks about whatever is missing.
+    required_facts=(),
+    optional_facts=(
         "student.full_name",
+        "student.home_country",
         "program.university",
         "program.course",
         "program.start_date",
-        "funding.costs",
-        "funding.funds",
-        "uk.accommodation_plan",
-    ),
-    optional_facts=(
         "program.level",
         "uk.offer_conditions",
+        "uk.accommodation_plan",
         "academic.history",
         "academic.gap_explanation",
         "academic.english_test",
+        "funding.costs",
+        "funding.funds",
         "funding.scholarships",
         "funding.sponsor_income",
     ),

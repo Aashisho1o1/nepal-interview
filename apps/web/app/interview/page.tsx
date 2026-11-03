@@ -4,6 +4,7 @@
 // vendors: the API returns a launch and the matching stage component renders it.
 // Clock, End button, page-exit cleanup and the move to feedback are shared.
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import Shell from "@/components/Shell";
@@ -159,6 +160,9 @@ export default function Interview() {
               This interviewer doesn&apos;t give written feedback yet. Your session still counts, and you can rate it afterwards.
             </p>
           )}
+          <p className="small" style={{ margin: "16px 0 0" }}>
+            <Link href="/prepare">Add your details</Link> for a more realistic interview.
+          </p>
           <p className="caption" style={{ margin: "16px 0 6px" }}>{DATA_NOTE}</p>
           <p className="caption" style={{ margin: "0 0 20px" }}>{DISCLAIMER}</p>
           <button type="button" className="btn btn-primary btn-block" onClick={start} disabled={phase === "starting" || !me || !providerId || (chosen && tierOff(chosen))}>

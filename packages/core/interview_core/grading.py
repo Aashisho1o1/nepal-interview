@@ -239,6 +239,9 @@ class RulesGrader:
             tasks.append(
                 "Give a concise funding explanation using your confirmed figures: who "
                 "pays, how much, and when the money is available."
+                if figures
+                else "Give a concise funding explanation: who pays, how much, and when "
+                "the money is available."
             )
         if any(f["category"] == "concise_delivery" for f in findings):
             tasks.append("Practise answering each question in under 30 seconds.")

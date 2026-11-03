@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, firstName, type Me } from "@/lib/api";
 
-const STEPS = ["Choose", "Check facts", "Practise", "Feedback"];
+const STEPS = ["Your account", "About you", "Practise", "Feedback"];
 
 type Props = {
   step?: 1 | 2 | 3 | 4;

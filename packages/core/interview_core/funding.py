@@ -286,6 +286,19 @@ def compute_funding(snapshot: dict[str, Any]) -> FundingSummary:
     )
 
 
+def funding_or_none(snapshot: dict[str, Any]) -> FundingSummary | None:
+    """The summary, or None when the student hasn't given costs (quick practice)."""
+    try:
+        return compute_funding(snapshot)
+    except FundingInputError:
+        return None
+
+
+def empty_funding() -> FundingSummary:
+    """No figures at all: lets the grader run on a session with no funding facts."""
+    return FundingSummary("GBP", 0, 0, 0, 0, 0, 0, 0, "incomplete")
+
+
 def describe_for_interviewer(s: FundingSummary) -> str:
     """Plain text summary for the prompt. Figures are pre-computed; no maths left."""
     lines = [

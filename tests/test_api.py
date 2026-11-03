@@ -80,11 +80,15 @@ async def test_login_rejects_bad_password_and_foreign_origin(make_env):
 # ---------------------------------------------------------------- facts & isolation
 
 
-async def test_cannot_start_without_confirmed_snapshot_and_corrections_keep_shape(make_env):
+async def test_students_can_practise_with_no_details_and_corrections_keep_shape(make_env):
     env = await make_env()
-    c = await login_student(env, "a@synthetic.test", "A")
-    r = await start(c)
-    assert r.status_code == 409 and r.json()["error"] == "no_snapshot"
+    c = await login_student(env, "a@synthetic.test", "Asha Student")
+    # No details checked, no snapshot: practice still starts, on an empty snapshot.
+    r = await start(c, VOICE)
+    assert r.status_code == 200, r.text
+    dv = r.json()["launch"]["dynamic_variables"]
+    assert dv["student_first_name"] == "Asha"
+    assert dv["university"] == dv["family_income"] == dv["funding_summary"] == "not provided"
     r = await c.patch(
         "/api/profile/facts/fund-loan", json={"status": "corrected", "value": {"new_key": "x"}}
     )
@@ -97,12 +101,95 @@ async def test_cannot_start_without_confirmed_snapshot_and_corrections_keep_shap
     snap = await confirm_all_and_snapshot(c)
     assert snap["funding"]["gap_minor"] == 0
     assert snap["missing"]["uk_pre_cas"] == []
-    # A rejected fact leaves the snapshot and blocks the session.
-    await c.patch("/api/profile/facts/program-course", json={"status": "rejected"})
-    snap2 = (await c.post("/api/profile/snapshot")).json()
-    assert "program.course" in snap2["missing"]["uk_pre_cas"]
-    r = await start(c)
-    assert r.status_code == 409 and r.json()["error"] == "facts_incomplete"
+
+
+QUICK = {
+    "name": "Sita Rai",
+    "university": "University of Leeds",
+    "course": "MSc Data Science",
+    "home_country": "Nepal",
+    "family_income_npr": "18,00,000",
+}
+
+
+async def test_about_you_quick_details_reach_the_interviewer(make_env):
+    env = await make_env()
+    async with env.client() as c:
+        assert (await signup(c, name="Sita")).status_code == 200
+        # A new account starts with only its name.
+        assert (await c.get("/api/profile/facts")).json() == []
+        assert (await c.get("/api/profile/details")).json()["name"] == "Sita"
+        r = await c.put("/api/profile/details", json=QUICK)
+        assert r.status_code == 200, r.text
+        assert "error" in r.json()["funding"]  # no costs given: no funding table
+        got = (await c.get("/api/profile/details")).json()
+        assert {k: got[k] for k in QUICK} == {**QUICK, "family_income_npr": "1800000"}
+        assert (await c.get("/api/me")).json()["display_name"] == "Sita Rai"
+        dv = (await start(c, VOICE)).json()["launch"]["dynamic_variables"]
+        assert dv["student_first_name"] == "Sita"
+        assert dv["university"] == "University of Leeds"
+        assert dv["course"] == "MSc Data Science"
+        assert dv["home_country"] == "Nepal"
+        assert dv["family_income"] == "NPR 1,800,000 per year"
+        assert dv["funding_summary"] == "not provided"
+    # Another student sees none of it.
+    async with env.client() as other:
+        assert (await signup(other, email="other@example.test", name="Ram")).status_code == 200
+        theirs = (await other.get("/api/profile/details")).json()
+        assert theirs["university"] == "" and theirs["name"] == "Ram"
+
+
+async def test_full_bio_computes_funding_and_saving_replaces_values(make_env):
+    env = await make_env()
+    async with env.client() as c:
+        assert (await signup(c)).status_code == 200
+        bio = {
+            **QUICK,
+            "start_month": "2027-09",
+            "tuition_gbp": "18500",
+            "living_gbp": "12006",
+            "scholarship_gbp": "2500",
+            "deposit_gbp": "5000",
+            "savings_gbp": "15000",
+            "loan_gbp": "8500",
+            "english_test": "IELTS 6.5",
+        }
+        f = (await c.put("/api/profile/details", json=bio)).json()["funding"]
+        assert f["required_minor"] == 3_050_600 and f["net_required_minor"] == 2_800_600
+        assert f["identified_funds_minor"] == 2_850_000 and f["gap_minor"] == 0
+        # Saving again replaces values, it never adds them up twice; a cleared field goes.
+        f = (
+            await c.put(
+                "/api/profile/details", json={**bio, "tuition_gbp": "20000", "loan_gbp": ""}
+            )
+        ).json()["funding"]
+        assert f["required_minor"] == 3_200_600
+        assert f["identified_funds_minor"] == 2_000_000
+        assert (await c.get("/api/profile/details")).json()["loan_gbp"] == ""
+        for bad in ({"tuition_gbp": "a lot"}, {"tuition_gbp": "-5"}, {"start_month": "Sept"}):
+            assert (await c.put("/api/profile/details", json=bad)).status_code == 422
+
+
+async def test_demo_account_form_starts_from_example_facts_and_saving_replaces_them(make_env):
+    env = await make_env()
+    c = await login_student(env, "a@synthetic.test", "A")
+    got = (await c.get("/api/profile/details")).json()
+    assert got["university"] == "Example University" and got["tuition_gbp"] == "18500"
+    f = (await c.put("/api/profile/details", json={**got, "living_gbp": "10000"})).json()["funding"]
+    # Example tuition 18,500 replaced by the same typed value, not added to it.
+    assert f["required_minor"] == 2_850_000
+
+
+async def test_session_with_no_details_still_gets_feedback(make_env):
+    env = await make_env()
+    c = await login_student(env, "a@synthetic.test", "A")
+    sid = (await start(c, VOICE)).json()["session_id"]
+    await age_session(env, sid, ready_ago_s=90)
+    await end(c, sid)
+    out = await ingest_transcript(env.pool, env.s, sid, TURNS)
+    assert out["status"] == "graded"
+    fb = (await c.get(f"/api/sessions/{sid}/feedback")).json()
+    assert fb["feedback"]["status"] == "ready"
 
 
 async def test_no_cross_student_access(make_env):
@@ -363,12 +450,7 @@ async def test_signup_creates_a_signed_in_student_who_can_practise(make_env):
         assert me["display_name"] == "Sita Rai"
         assert me["balances"]["premium_seconds"]["available"] == 300
         assert me["balances"]["basic_seconds"]["available"] == 300
-        facts = (await c.get("/api/profile/facts")).json()
-        name_fact = next(f for f in facts if f["field_name"] == "student.full_name")
-        assert name_fact["value_json"] == "Sita Rai"
-        assert all(f["confirmation_status"] == "proposed" for f in facts)
-        await confirm_all_and_snapshot(c)
-        assert (await start(c, VOICE)).status_code == 200
+        assert (await start(c, VOICE)).status_code == 200  # no details needed
         # The new password works for a normal sign-in.
         out = env.client()
         r = await out.post(

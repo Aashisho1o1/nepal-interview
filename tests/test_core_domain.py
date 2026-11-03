@@ -187,11 +187,9 @@ def test_pre_cas_track_never_requires_a_cas():
     assert set(TRACKS) == {"uk_pre_cas"}
     assert "uk.cas_number" not in UK_PRE_CAS.required_facts
     assert "uk.cas_number" in UK_PRE_CAS.must_not_require
-    assert "uk.accommodation_plan" in UK_PRE_CAS.required_facts
-    assert missing_required(UK_PRE_CAS, snap()) == []
-    assert missing_required(UK_PRE_CAS, snap(**{"accommodation": None})) == [
-        "uk.accommodation_plan"
-    ]
+    # Students can practise with no details at all.
+    assert UK_PRE_CAS.required_facts == ()
+    assert missing_required(UK_PRE_CAS, {"facts": []}) == []
     for f in UK_PRE_CAS.formats:
         assert "not" in f.disclosure.lower()  # every format says what it is not
 

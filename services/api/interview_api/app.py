@@ -19,10 +19,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from interview_core import POLICY_VERSION
 from interview_core.dynamic_vars import build_dynamic_variables
 from interview_core.facts import Fact, build_snapshot, missing_required
-from interview_core.funding import FundingInputError, compute_funding
+from interview_core.funding import FundingInputError, compute_funding, funding_or_none
 from interview_core.pricing import load_price_table
 from interview_core.tracks import TRACKS, get_track
 
+from . import details
 from .accounts import provision_student
 from .auth import (
     COOKIE,
@@ -246,44 +247,78 @@ def create_app(
             await audit(conn, str(st["user_id"]), f"fact.{body.status}", "fact", ref)
         return {"ok": True}
 
+    async def _new_snapshot(conn, student_id) -> dict:
+        """Freeze the student's confirmed facts into a new snapshot version. Call inside a
+        transaction."""
+        cur = await conn.execute(
+            "SELECT * FROM extracted_facts WHERE student_id=%s FOR UPDATE", (student_id,)
+        )
+        rows = await cur.fetchall()
+        cur = await conn.execute(
+            "SELECT COALESCE(MAX(version),0)+1 AS v FROM profile_snapshots WHERE student_id=%s",
+            (student_id,),
+        )
+        version = (await cur.fetchone())["v"]
+        facts = [
+            Fact(
+                r["ref"],
+                r["field_name"],
+                r["value_json"],
+                r["source_label"],
+                r["source_snippet"],
+                r["confirmation_status"],
+            )
+            for r in rows
+        ]
+        snap = build_snapshot(facts, version)
+        try:
+            funding = compute_funding(snap).to_dict()
+        except FundingInputError as e:
+            funding = {"error": str(e)}
+        cur = await conn.execute(
+            "INSERT INTO profile_snapshots (student_id, version, confirmed_facts_json, "
+            "funding_json) VALUES (%s,%s,%s,%s) RETURNING *",
+            (student_id, version, Jsonb(snap), Jsonb(funding)),
+        )
+        return await cur.fetchone()
+
+    def _snapshot_out(row) -> dict:
+        return {
+            "version": row["version"],
+            "funding": row["funding_json"],
+            "missing": {
+                t.id: missing_required(t, row["confirmed_facts_json"]) for t in TRACKS.values()
+            },
+        }
+
     @app.post("/api/profile/snapshot", dependencies=[Depends(origin_guard)])
     async def create_snapshot(st=Depends(current_student)):
         async with app.state.pool.connection() as conn, conn.transaction():
+            row = await _new_snapshot(conn, st["student_id"])
+        return _snapshot_out(row)
+
+    @app.get("/api/profile/details")
+    async def get_details(st=Depends(current_student)):
+        async with app.state.pool.connection() as conn:
             cur = await conn.execute(
-                "SELECT * FROM extracted_facts WHERE student_id=%s FOR UPDATE", (st["student_id"],)
-            )
-            rows = await cur.fetchall()
-            cur = await conn.execute(
-                "SELECT COALESCE(MAX(version),0)+1 AS v FROM profile_snapshots WHERE student_id=%s",
+                "SELECT ref, field_name, value_json, confirmation_status FROM extracted_facts "
+                "WHERE student_id=%s",
                 (st["student_id"],),
             )
-            version = (await cur.fetchone())["v"]
-            facts = [
-                Fact(
-                    r["ref"],
-                    r["field_name"],
-                    r["value_json"],
-                    r["source_label"],
-                    r["source_snippet"],
-                    r["confirmation_status"],
-                )
-                for r in rows
-            ]
-            snap = build_snapshot(facts, version)
-            try:
-                funding = compute_funding(snap).to_dict()
-            except FundingInputError as e:
-                funding = {"error": str(e)}
-            await conn.execute(
-                "INSERT INTO profile_snapshots (student_id, version, confirmed_facts_json, "
-                "funding_json) VALUES (%s,%s,%s,%s)",
-                (st["student_id"], version, Jsonb(snap), Jsonb(funding)),
+            values = details.from_facts(await cur.fetchall())
+        if not values["name"]:
+            values["name"] = st["display_name"]
+        return values
+
+    @app.put("/api/profile/details", dependencies=[Depends(origin_guard)])
+    async def put_details(body: details.Details, st=Depends(current_student)):
+        async with app.state.pool.connection() as conn, conn.transaction():
+            await details.save(conn, st["student_id"], body)
+            row = await _new_snapshot(conn, st["student_id"])
+            await audit(
+                conn, str(st["user_id"]), "profile.details", "student", str(st["student_id"])
             )
-        return {
-            "version": version,
-            "funding": funding,
-            "missing": {t.id: missing_required(t, snap) for t in TRACKS.values()},
-        }
+        return _snapshot_out(row)
 
     async def _latest_snapshot(conn, student_id):
         cur = await conn.execute(
@@ -336,16 +371,13 @@ def create_app(
         except KeyError as e:
             raise HTTPException(422, "unknown track or format") from e
         key = request.headers.get("idempotency-key", "")
-        async with app.state.pool.connection() as conn:
+        # No details needed: a student who skipped the form practises on an empty
+        # snapshot and the interviewer asks about what it doesn't know.
+        async with app.state.pool.connection() as conn, conn.transaction():
             snap = await _latest_snapshot(conn, st["student_id"])
-        if not snap:
-            raise QuotaError(409, "no_snapshot", "Confirm your facts before practising.")
+            if not snap:
+                snap = await _new_snapshot(conn, st["student_id"])
         facts = snap["confirmed_facts_json"]
-        missing = missing_required(track, facts)
-        if missing or "error" in snap["funding_json"]:
-            raise QuotaError(
-                409, "facts_incomplete", "Some required facts are not confirmed.", missing=missing
-            )
         res = await start_session(
             app.state.pool,
             s,
@@ -381,7 +413,7 @@ def create_app(
                 session_id=str(sess["id"]),
                 student_name=st["display_name"],
                 facts=facts,
-                funding=compute_funding(facts),
+                funding=funding_or_none(facts),
                 practice_seconds=sess["practice_seconds"],
             ),
         )

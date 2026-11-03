@@ -40,15 +40,6 @@ export type Me = {
   voice_available: boolean;
 };
 
-export type Fact = {
-  ref: string;
-  field_name: string;
-  value_json: unknown;
-  source_label: string;
-  source_snippet: string;
-  confirmation_status: "proposed" | "confirmed" | "corrected" | "rejected";
-};
-
 export function fmtMinor(minor: number, currency: string) {
   return `${currency} ${(minor / 100).toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }

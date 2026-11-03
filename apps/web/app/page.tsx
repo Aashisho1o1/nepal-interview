@@ -7,18 +7,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
-import { api, ApiError, firstName, Fact, Me, SessionSummary } from "@/lib/api";
+import { api, ApiError, firstName, Me, SessionSummary } from "@/lib/api";
 import { DISCLAIMER, END_REASON, STATUS } from "@/lib/copy";
 
-type Snapshot = { version: number | null; funding?: { error?: string }; missing?: Record<string, string[]> };
-type Home = { me: Me; unchecked: number; ready: boolean; last: SessionSummary | null };
-
-const isReady = (snap: Snapshot) =>
-  snap.version !== null && (snap.missing?.uk_pre_cas ?? []).length === 0 && !snap.funding?.error;
+type Home = { me: Me; last: SessionSummary | null };
 
 const STEPS: [string, string][] = [
   ["Create your account", "Free to start. No card needed."],
-  ["Check your facts", "Confirm the details your interviewer will use."],
+  ["Tell us about you", "Five quick details, or skip and practise straight away."],
   ["Have a conversation", "Video or voice. Five minutes, three questions, out loud, like the real day."],
   ["See your feedback", "What went well and what to practise, in your own words."],
 ];
@@ -37,13 +33,8 @@ export default function HomePage() {
   useEffect(() => {
     api<Me>("/me")
       .then(async (me) => {
-        const [facts, snap, sessions] = await Promise.all([
-          api<Fact[]>("/profile/facts"),
-          api<Snapshot>("/profile/snapshot"),
-          api<SessionSummary[]>("/sessions"),
-        ]);
-        const unchecked = facts.filter((f) => f.confirmation_status === "proposed").length;
-        setHome({ me, unchecked, ready: isReady(snap), last: sessions.find((s) => s.status !== "created" && s.status !== "active") ?? null });
+        const sessions = await api<SessionSummary[]>("/sessions");
+        setHome({ me, last: sessions.find((s) => s.status !== "created" && s.status !== "active") ?? null });
       })
       .catch(() => setHome(null));
   }, []);
@@ -68,12 +59,11 @@ export default function HomePage() {
     try {
       if (signup) {
         await api("/auth/signup", { method: "POST", json: { name, email, password } });
-        router.push("/prepare"); // a new account always checks its facts first
+        router.push("/prepare"); // "About you", which they can skip
         return;
       }
       await api("/auth/login", { method: "POST", json: { email, password } });
-      const snap = await api<Snapshot>("/profile/snapshot").catch(() => ({ version: null }) as Snapshot);
-      router.push(isReady(snap) ? "/interview" : "/prepare");
+      router.push("/interview");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : signup ? "Could not create your account." : "Could not sign in.");
       setBusy(false);
@@ -99,19 +89,12 @@ export default function HomePage() {
         <section className="section cards">
           <h1>Welcome back, {firstName(home.me)}.</h1>
           <div className="card card-strong">
-            {home.unchecked > 0 || !home.ready ? (
-              <>
-                <h2>Finish checking your facts{home.unchecked > 0 && <span className="nums"> ({home.unchecked} left)</span>}</h2>
-                <p className="small">Your interviewer only uses details you&apos;ve marked as correct.</p>
-                <Link href="/prepare" className="btn btn-primary">Continue</Link>
-              </>
-            ) : (
-              <>
-                <h2>Ready for another session?</h2>
-                <p className="small">Pick video or voice on the next page.</p>
-                <Link href="/interview" className="btn btn-primary">Practise again</Link>
-              </>
-            )}
+            <h2>Ready to practise?</h2>
+            <p className="small">Pick video or voice on the next page.</p>
+            <div className="btn-row">
+              <Link href="/interview" className="btn btn-primary">Practise now</Link>
+              <Link href="/prepare" className="btn btn-secondary">Update my details</Link>
+            </div>
           </div>
           {home.last && (
             <p className="small" style={{ marginTop: 16 }}>

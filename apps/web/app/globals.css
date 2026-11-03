@@ -104,7 +104,7 @@ main.narrow { max-width: var(--w-narrow); }
 .chip--outline { background: var(--bg); border: 1px solid var(--line); color: var(--muted); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-input[type="email"], input[type="password"], input[type="text"], textarea {
+input[type="email"], input[type="password"], input[type="text"], input[type="month"], textarea {
   width: 100%; height: 48px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px;
   font: 400 16px/1 inherit; font-family: inherit; background: var(--bg); color: var(--ink);
 }
@@ -133,14 +133,8 @@ details > *:not(summary) { margin-top: 10px; }
 .tier .small { display: block; margin-bottom: 12px; }
 
 /* ---------- facts ---------- */
-.fact { padding: 16px; }
-.fact-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.fact-value { font-size: 17px; font-weight: 500; margin: 2px 0 6px; }
 .quote { background: var(--surface-2); border-radius: var(--r); padding: 10px 12px; font-size: 15px; line-height: 1.5; margin: 8px 0 14px; }
 .quote a { color: var(--link); }
-.fact .btn { height: 44px; }
-.progress { margin: 0 0 20px; }
-.progress .caption { margin-bottom: 8px; }
 .sticky-bar { position: sticky; bottom: 0; margin: 20px calc(-1 * var(--pad)) 0; padding: 12px var(--pad) calc(12px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); }
 table { width: 100%; border-collapse: collapse; font-size: 15px; }
 td { padding: 10px 0; border-top: 1px solid var(--line); vertical-align: top; }
