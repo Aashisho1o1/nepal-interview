@@ -1,0 +1,8 @@
+{
+  "name": "nepal-interview-railway",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "railway": "3.16.0"
+  }
+}

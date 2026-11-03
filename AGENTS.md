@@ -1,9 +1,16 @@
 # Notes for coding agents
 
-## Open TODO: make the API private (owner decision, 2026-11-02)
+## Hosting
+
+The app is launched on Railway (`.railway/railway.ts`, steps in `.railway/README.md`).
+There the API is already private: only the website is public, and it proxies `/api/*`
+to the API over Railway's private network. Never give the `api` or `worker` service a
+public domain.
+
+## Open TODO if Vercel is used again: make the API private (owner decision, 2026-11-02)
 
 The `api` service in `vercel.json` is public at `/api/*` on purpose, for quick testing.
-Before real students use the app, make it internal:
+Before real students use a Vercel deployment, make it internal:
 
 - Remove the `/api/(.*)` rewrite to `api` from `vercel.json`, so the service gets no
   public traffic.

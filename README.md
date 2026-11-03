@@ -67,7 +67,14 @@ TEST_DATABASE_URL=postgresql://localhost/ni_test uv run pytest -q
 cd apps/web && npx eslint && npx tsc --noEmit && npm run build
 ```
 
-## Deploy on Vercel
+## Deploy on Railway (current)
+
+`.railway/railway.ts` declares Postgres and three services in Singapore: `web` (the
+only public one), a private `api` that `web` proxies `/api/*` to, and a `worker` running
+the reconciler loop. Steps: `.railway/README.md`.
+
+## Deploy on Vercel (alternative)
+
 
 `vercel.json` deploys one project with two services on one domain: `web` (Next.js,
 `apps/web`) for every page, and `api` (FastAPI, entry `asgi.py`) for `/api/*`. Neither
