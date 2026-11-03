@@ -6,6 +6,7 @@ import asyncio
 import hmac
 import json
 import logging
+import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -22,12 +23,15 @@ from interview_core.funding import FundingInputError, compute_funding
 from interview_core.pricing import load_price_table
 from interview_core.tracks import TRACKS, get_track
 
+from .accounts import provision_student
 from .auth import (
     COOKIE,
-    LoginLimiter,
+    RateLimiter,
     check_origin,
+    client_ip,
     create_login,
     current_student,
+    hash_password,
     token_hash,
     verify_password,
 )
@@ -38,6 +42,9 @@ from .quota import QuotaError, balances, settle_session, start_session
 from .reconcile import close_vendor, reconcile_once
 
 log = logging.getLogger("interview_api")
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+SIGNUP_PACKAGE = "signup-trial-v1"
 
 
 class Strict(BaseModel):
@@ -66,7 +73,8 @@ def create_app(
     app = FastAPI(title="Nepal interview session API", lifespan=lifespan)
     app.state.settings = s
     app.state.prices = load_price_table(s.price_table_path)
-    app.state.limiter = LoginLimiter()
+    app.state.limiter = RateLimiter(max_hits=8, window_s=600)  # failed logins per email
+    app.state.signups = RateLimiter(max_hits=5, window_s=3600)  # new accounts per network
 
     @app.exception_handler(QuotaError)
     async def _quota_err(_req, e: QuotaError):
@@ -91,10 +99,14 @@ def create_app(
             cur = await conn.execute("SELECT * FROM users WHERE email=%s", (key,))
             user = await cur.fetchone()
             if not user or not verify_password(body.password, user["password_hash"]):
-                app.state.limiter.fail(key)
+                app.state.limiter.hit(key)
                 raise HTTPException(401, "invalid email or password")
             raw, exp = await create_login(conn, user["id"], s.login_ttl_hours)
             await audit(conn, str(user["id"]), "auth.login", "user", str(user["id"]))
+        _set_login_cookie(response, raw, exp)
+        return {"ok": True}
+
+    def _set_login_cookie(response: Response, raw: str, exp: datetime) -> None:
         response.set_cookie(
             COOKIE,
             raw,
@@ -104,6 +116,53 @@ def create_app(
             expires=exp,
             path="/",
         )
+
+    class SignupBody(Strict):
+        name: str = Field(max_length=80)
+        email: str = Field(max_length=200)
+        password: str = Field(max_length=200)
+
+    @app.post("/api/auth/signup", dependencies=[Depends(origin_guard)])
+    async def signup(body: SignupBody, request: Request, response: Response):
+        if not s.signup_enabled:
+            raise HTTPException(403, "Sign-up is closed right now.")
+        name = " ".join(body.name.split())
+        email = body.email.strip().lower()
+        if not name:
+            raise HTTPException(422, "Enter your name.")
+        if not EMAIL_RE.match(email):
+            raise HTTPException(422, "Enter a valid email address.")
+        if len(body.password) < 8:
+            raise HTTPException(422, "Use a password of at least 8 characters.")
+        ip = client_ip(request)
+        if app.state.signups.blocked(ip):
+            raise HTTPException(429, "Too many new accounts from this network. Try again later.")
+        pw_hash = hash_password(body.password)
+        async with app.state.pool.connection() as conn, conn.transaction():
+            cur = await conn.execute(
+                "INSERT INTO users (email, password_hash) VALUES (%s,%s) "
+                "ON CONFLICT (email) DO NOTHING RETURNING id",
+                (email, pw_hash),
+            )
+            user = await cur.fetchone()
+            if user is None:
+                raise HTTPException(
+                    409, "An account with this email already exists. Sign in instead."
+                )
+            await provision_student(
+                conn,
+                user["id"],
+                name,
+                {
+                    "premium_seconds": s.signup_video_seconds,
+                    "basic_seconds": s.signup_voice_seconds,
+                },
+                SIGNUP_PACKAGE,
+            )
+            raw, exp = await create_login(conn, user["id"], s.login_ttl_hours)
+            await audit(conn, str(user["id"]), "auth.signup", "user", str(user["id"]))
+        app.state.signups.hit(ip)
+        _set_login_cookie(response, raw, exp)
         return {"ok": True}
 
     @app.post("/api/auth/logout", dependencies=[Depends(origin_guard)])

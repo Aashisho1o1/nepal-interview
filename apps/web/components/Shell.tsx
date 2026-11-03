@@ -47,7 +47,9 @@ export default function Shell({ step, title, intro, width = "page", me: given, c
                 <button type="button" className="btn btn-ghost" onClick={signOut}>Sign out</button>
               </>
             ) : (
-              <Link href="/#signin">Sign in</Link>
+              // A plain link fires "hashchange", so the home page opens its form in sign-in mode.
+              // eslint-disable-next-line @next/next/no-html-link-for-pages
+              <a href="/#signin">Sign in</a>
             )}
           </div>
         </div>

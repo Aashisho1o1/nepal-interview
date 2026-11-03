@@ -1,6 +1,6 @@
 "use client";
 
-// Home. Signed out: what this is, pick an interviewer, sign in. Signed in: a resume
+// Home. Signed out: what this is, pick an interviewer, sign up or sign in. Signed in: a resume
 // card and the same choice, no sales page. The pick is remembered so the interview
 // page preselects it.
 
@@ -27,11 +27,14 @@ export default function HomePage() {
   const router = useRouter();
   const [home, setHome] = useState<Home | null | undefined>(undefined); // undefined = loading
   const [mode, setMode] = useState<Mode | null>(null);
+  const [account, setAccount] = useState<"signup" | "signin">("signup");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api<Me>("/me")
@@ -48,6 +51,19 @@ export default function HomePage() {
       .catch(() => setHome(null));
   }, []);
 
+  // The header's "Sign in" link (/#signin) opens the form in sign-in mode.
+  useEffect(() => {
+    const sync = () => {
+      if (window.location.hash === "#signin") setAccount("signin");
+    };
+    window.addEventListener("hashchange", sync);
+    const t = setTimeout(sync, 0);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("hashchange", sync);
+    };
+  }, []);
+
   function choose(m: Mode) {
     setMode(m);
     saveMode(m);
@@ -57,7 +73,7 @@ export default function HomePage() {
       return;
     }
     document.getElementById("signin")?.scrollIntoView({ block: "center" });
-    emailRef.current?.focus({ preventScroll: true });
+    (account === "signup" ? nameRef : emailRef).current?.focus({ preventScroll: true });
   }
 
   async function submit(e: React.FormEvent) {
@@ -65,12 +81,17 @@ export default function HomePage() {
     setBusy(true);
     setError("");
     try {
+      if (account === "signup") {
+        await api("/auth/signup", { method: "POST", json: { name, email, password } });
+        router.push("/prepare"); // a new account always checks its facts first
+        return;
+      }
       await api("/auth/login", { method: "POST", json: { email, password } });
       const snap = await api<Snapshot>("/profile/snapshot").catch(() => ({ version: null }) as Snapshot);
       const ready = snap.version !== null && (snap.missing?.uk_pre_cas ?? []).length === 0 && !snap.funding?.error;
       router.push(ready ? "/interview" : "/prepare");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not sign in.");
+      setError(err instanceof ApiError ? err.message : account === "signup" ? "Could not create your account." : "Could not sign in.");
       setBusy(false);
     }
   }
@@ -136,14 +157,20 @@ export default function HomePage() {
             <h2>Who would you like to talk to?</h2>
             {tiers}
             <form className="card signin" id="signin" onSubmit={submit}>
-              <h2>Sign in to start</h2>
+              <h2>{account === "signup" ? "Create your free account" : "Welcome back"}</h2>
               {mode ? (
                 <p className="chips" style={{ marginBottom: 14 }}>
                   <span className="chip">You picked: {TIERS[mode].title}</span>
                   <button type="button" className="btn btn-ghost" onClick={() => setMode(null)}>change</button>
                 </p>
               ) : (
-                <p className="small">Pick an interviewer above, then sign in.</p>
+                <p className="small">Pick an interviewer above, then {account === "signup" ? "create your account" : "sign in"}.</p>
+              )}
+              {account === "signup" && (
+                <div className="field">
+                  <label htmlFor="name">Your name</label>
+                  <input id="name" ref={nameRef} type="text" autoComplete="name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} required />
+                </div>
               )}
               <div className="field">
                 <label htmlFor="email">Email</label>
@@ -151,14 +178,34 @@ export default function HomePage() {
               </div>
               <div className="field">
                 <label htmlFor="password">Password</label>
-                <input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <input
+                  id="password"
+                  type="password"
+                  autoComplete={account === "signup" ? "new-password" : "current-password"}
+                  minLength={account === "signup" ? 8 : undefined}
+                  aria-describedby={account === "signup" ? "pw-hint" : undefined}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                {account === "signup" && <p id="pw-hint" className="caption" style={{ margin: "6px 0 0" }}>At least 8 characters.</p>}
               </div>
               <button type="submit" className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16 }}>
-                {busy ? "Signing in…" : "Sign in"}
+                {busy ? (account === "signup" ? "Creating your account…" : "Signing in…") : account === "signup" ? "Create account" : "Sign in"}
               </button>
               {error && <p className="error" role="alert" style={{ marginTop: 10 }}>{error}</p>}
               <p className="caption" style={{ marginTop: 12 }}>
-                Use the email and password from your consultancy. New here? Ask your counsellor for an account. This is a private early preview.
+                {account === "signup" ? "Free practice time to start. No card needed. Already have an account?" : "New here?"}{" "}
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setAccount(account === "signup" ? "signin" : "signup");
+                    setError("");
+                  }}
+                >
+                  {account === "signup" ? "Sign in" : "Create a free account"}
+                </button>
               </p>
             </form>
           </section>

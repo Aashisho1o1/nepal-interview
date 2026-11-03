@@ -49,20 +49,27 @@ async def create_login(conn, user_id, ttl_hours: int) -> tuple[str, datetime]:
     return raw, exp
 
 
-class LoginLimiter:
-    """Per-process failed-login limiter. A shared store is needed with >1 API process."""
+class RateLimiter:
+    """Per-process sliding-window counter (failed logins, sign-ups). A shared store is
+    needed with more than one API process."""
 
-    def __init__(self, max_failures: int = 8, window_s: int = 600):
-        self.max, self.window = max_failures, window_s
-        self.failures: dict[str, list[float]] = defaultdict(list)
+    def __init__(self, max_hits: int, window_s: int):
+        self.max, self.window = max_hits, window_s
+        self.hits: dict[str, list[float]] = defaultdict(list)
 
     def blocked(self, key: str) -> bool:
         now = time.monotonic()
-        self.failures[key] = [t for t in self.failures[key] if now - t < self.window]
-        return len(self.failures[key]) >= self.max
+        self.hits[key] = [t for t in self.hits[key] if now - t < self.window]
+        return len(self.hits[key]) >= self.max
 
-    def fail(self, key: str) -> None:
-        self.failures[key].append(time.monotonic())
+    def hit(self, key: str) -> None:
+        self.hits[key].append(time.monotonic())
+
+
+def client_ip(request: Request) -> str:
+    """The host platform's edge (Railway, Vercel) sets X-Real-IP; the website's proxy
+    passes it through. Locally there is none."""
+    return request.headers.get("x-real-ip") or (request.client.host if request.client else "")
 
 
 def check_origin(request: Request, allowed: tuple[str, ...]) -> None:

@@ -34,7 +34,8 @@ redeploys the services whose watched paths changed.
 5. Open `web` > Settings > Networking > Generate Domain. Then redeploy `api` so its
    `ALLOWED_ORIGINS` picks up that address. Check the variable shows a real
    `https://...up.railway.app` value, not the `${{...}}` text.
-6. Create tester logins (runs inside the API container, on the private network):
+6. Anyone can now create an account on the website. To also add the demo student
+   (`student@synthetic.test`), run this inside the API container:
 
    ```bash
    railway ssh --service api

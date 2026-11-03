@@ -54,7 +54,7 @@ uv run --env-file .env python -m interview_api.reconcile --loop
 cd apps/web && cp .env.example .env.local && npm ci && npm run dev
 ```
 
-Open http://localhost:3000 and sign in as `student@synthetic.test`. The seeded student
+Open http://localhost:3000 and create an account, or sign in as `student@synthetic.test`. The seeded student
 is synthetic (Example University, GBP figures); confirm the facts, then practise.
 
 Paste `interviewer/officer_miller_prompt.md` into the ElevenLabs agent; the app sends

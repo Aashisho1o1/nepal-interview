@@ -6,7 +6,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
-import { api, ApiError, Fact, fmtMinor } from "@/lib/api";
+import { api, ApiError, Fact, fmtMinor, Me } from "@/lib/api";
 import { factLabel, factNote, factValue, groupFacts } from "@/lib/facts";
 
 type Funding = {
@@ -25,14 +25,16 @@ type Snapshot = { version: number | null; funding?: Funding; missing?: Record<st
 
 export default function Prepare() {
   const router = useRouter();
+  const [me, setMe] = useState<Me | null>(null);
   const [facts, setFacts] = useState<Fact[]>([]);
   const [snap, setSnap] = useState<Snapshot>({ version: null });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    return Promise.all([api<Fact[]>("/profile/facts"), api<Snapshot>("/profile/snapshot")])
-      .then(([f, s]) => {
+    return Promise.all([api<Me>("/me"), api<Fact[]>("/profile/facts"), api<Snapshot>("/profile/snapshot")])
+      .then(([m, f, s]) => {
+        setMe(m);
         setFacts(f);
         setSnap(s);
       })
@@ -75,12 +77,20 @@ export default function Prepare() {
   const missing = snap.missing?.uk_pre_cas ?? [];
   const funding = snap.funding && !snap.funding.error ? snap.funding : null;
   const ready = snap.version !== null && missing.length === 0 && funding !== null;
+  // Until students can add their own documents, new accounts start from an example
+  // applicant's details with their own name.
+  const example = me?.is_synthetic ?? false;
 
   return (
     <Shell
       step={2}
+      me={me}
       title="Check your facts"
-      intro="We found these details in your documents. Tap Correct if a detail is right, Wrong if it isn't. Your interviewer only uses details you mark as correct."
+      intro={
+        example
+          ? "To get you practising now, these are an example applicant's details with your name. Adding your own documents is coming soon. Tap Correct to use a detail, Wrong to leave it out."
+          : "We found these details in your documents. Tap Correct if a detail is right, Wrong if it isn't. Your interviewer only uses details you mark as correct."
+      }
     >
       {facts.length > 0 && (
         <div className="progress">
@@ -120,7 +130,7 @@ export default function Prepare() {
                 </div>
                 {st === "rejected" && (
                   <p className="caption" style={{ marginTop: 10 }}>
-                    Marked wrong, so the interviewer won&apos;t use it. Ask your counsellor to fix it, then mark it correct.
+                    Marked wrong, so the interviewer won&apos;t use it.{!example && " Ask your counsellor to fix it, then mark it correct."}
                   </p>
                 )}
               </div>

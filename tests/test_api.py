@@ -10,9 +10,11 @@ from __future__ import annotations
 import asyncio
 import uuid
 
+import httpx
 import pytest
 
 from conftest import (
+    ORIGIN,
     VIDEO_SECONDS,
     VOICE,
     VOICE_SECONDS,
@@ -340,6 +342,76 @@ async def test_unknown_track_or_format_is_refused(make_env):
     c = await ready_student(env)
     assert (await start(c, track="ukvi", format_id="interview_5m")).status_code == 422
     assert (await start(c, track="uk_pre_cas", format_id="drill_3m")).status_code == 422
+
+
+# ---------------------------------------------------------------- sign-up
+
+
+async def signup(c, email="new@example.test", name="  Sita   Rai ", password="long-enough-pw"):
+    return await c.post(
+        "/api/auth/signup", json={"name": name, "email": email, "password": password}
+    )
+
+
+async def test_signup_creates_a_signed_in_student_who_can_practise(make_env):
+    env = await make_env(signup_video_seconds=300, signup_voice_seconds=300)
+    async with env.client() as c:
+        r = await signup(c, email="New@Example.TEST")
+        assert r.status_code == 200, r.text
+        me = (await c.get("/api/me")).json()  # the sign-up also signed them in
+        assert me["email"] == "new@example.test"
+        assert me["display_name"] == "Sita Rai"
+        assert me["balances"]["premium_seconds"]["available"] == 300
+        assert me["balances"]["basic_seconds"]["available"] == 300
+        facts = (await c.get("/api/profile/facts")).json()
+        name_fact = next(f for f in facts if f["field_name"] == "student.full_name")
+        assert name_fact["value_json"] == "Sita Rai"
+        assert all(f["confirmation_status"] == "proposed" for f in facts)
+        await confirm_all_and_snapshot(c)
+        assert (await start(c, VOICE)).status_code == 200
+        # The new password works for a normal sign-in.
+        out = env.client()
+        r = await out.post(
+            "/api/auth/login", json={"email": "new@example.test", "password": "long-enough-pw"}
+        )
+        assert r.status_code == 200
+
+
+async def test_signup_rejects_duplicates_bad_input_and_foreign_origins(make_env):
+    env = await make_env()
+    async with env.client() as c:
+        assert (await signup(c)).status_code == 200
+        r = await signup(c, email="NEW@example.test", password="another-password")
+        assert r.status_code == 409
+        assert "already exists" in r.json()["detail"]
+        assert (await signup(c, email="b@example.test", password="short")).status_code == 422
+        assert (await signup(c, email="not-an-email")).status_code == 422
+        assert (await signup(c, email="c@example.test", name="   ")).status_code == 422
+    # The existing account's password was not replaced by the duplicate attempt.
+    async with env.client() as c:
+        r = await c.post(
+            "/api/auth/login", json={"email": "new@example.test", "password": "another-password"}
+        )
+        assert r.status_code == 401
+    foreign = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=env.app),
+        base_url=ORIGIN,
+        headers={"origin": "https://evil.test"},
+    )
+    async with foreign:
+        assert (await signup(foreign, email="d@example.test")).status_code == 403
+
+
+async def test_signup_is_rate_limited_per_network_and_can_be_closed(make_env):
+    env = await make_env()
+    async with env.client() as c:
+        for i in range(5):
+            assert (await signup(c, email=f"u{i}@example.test")).status_code == 200
+        r = await signup(c, email="u5@example.test")
+        assert r.status_code == 429
+    closed = await make_env(signup_enabled=False)
+    async with closed.client() as c:
+        assert (await signup(c)).status_code == 403
 
 
 # ---------------------------------------------------------------- reconciliation
