@@ -21,7 +21,7 @@ ORIGIN = "http://test"
 
 # The two providers students get, configured as a deployment would (minus real keys).
 EMBED = (
-    "https://embed.liveavatar.com/v1/f7caa47d-4036-4c85-9aad-f9e238025ad2?orientation=horizontal"
+    "https://embed.liveavatar.com/v1/44e86a55-59ca-4c92-99f4-03a2f03d8d00?orientation=horizontal"
 )
 AGENT = "agent_test123"
 HERO_ENV = {
