@@ -23,7 +23,7 @@ from interview_core.funding import FundingInputError, compute_funding, funding_o
 from interview_core.pricing import load_price_table
 from interview_core.tracks import TRACKS, get_track
 
-from . import details
+from . import details, plans
 from .accounts import provision_student
 from .auth import (
     COOKIE,
@@ -76,6 +76,8 @@ def create_app(
     app.state.prices = load_price_table(s.price_table_path)
     app.state.limiter = RateLimiter(max_hits=8, window_s=600)  # failed logins per email
     app.state.signups = RateLimiter(max_hits=5, window_s=3600)  # new accounts per network
+    # Wrong promo codes: per student and per network, so codes can't be guessed.
+    app.state.code_tries = RateLimiter(max_hits=5, window_s=3600)
 
     @app.exception_handler(QuotaError)
     async def _quota_err(_req, e: QuotaError):
@@ -150,16 +152,8 @@ def create_app(
                 raise HTTPException(
                     409, "An account with this email already exists. Sign in instead."
                 )
-            await provision_student(
-                conn,
-                user["id"],
-                name,
-                {
-                    "premium_seconds": s.signup_video_seconds,
-                    "basic_seconds": s.signup_voice_seconds,
-                },
-                SIGNUP_PACKAGE,
-            )
+            # Practice time comes from the free plan (plans.py), granted day by day.
+            await provision_student(conn, user["id"], name, {}, SIGNUP_PACKAGE)
             raw, exp = await create_login(conn, user["id"], s.login_ttl_hours)
             await audit(conn, str(user["id"]), "auth.signup", "user", str(user["id"]))
         app.state.signups.hit(ip)
@@ -181,15 +175,39 @@ def create_app(
     @app.get("/api/me")
     async def me(st=Depends(current_student)):
         async with app.state.pool.connection() as conn:
+            await plans.ensure_free_grants(conn, st["student_id"], s)
             bal = await balances(conn, st["student_id"])
         return {
             "email": st["email"],
             "display_name": st["display_name"],
             "is_synthetic": st["is_synthetic"],
             "balances": bal,
+            # Length of one session per interviewer type, to show sessions left.
+            "session_seconds": {"avatar": plans.VIDEO_SECONDS, "voice": plans.VOICE_SECONDS},
             "video_available": s.video_tier_enabled,
             "voice_available": s.voice_tier_enabled,
         }
+
+    class CodeBody(Strict):
+        code: str = Field(max_length=64)
+
+    @app.post("/api/promo/redeem", dependencies=[Depends(origin_guard)])
+    async def redeem_code(body: CodeBody, request: Request, st=Depends(current_student)):
+        keys = (f"student:{st['student_id']}", f"ip:{client_ip(request)}")
+        if any(app.state.code_tries.blocked(k) for k in keys):
+            raise HTTPException(429, "Too many tries. Wait an hour and try again.")
+        try:
+            async with app.state.pool.connection() as conn, conn.transaction():
+                granted = await plans.redeem(conn, st["student_id"], body.code)
+                await audit(
+                    conn, str(st["user_id"]), "promo.redeem", "student", str(st["student_id"])
+                )
+        except HTTPException as e:
+            if e.status_code == 404:  # only wrong codes count as guesses
+                for k in keys:
+                    app.state.code_tries.hit(k)
+            raise
+        return granted
 
     @app.get("/api/providers")
     async def list_providers(st=Depends(current_student)):
@@ -344,8 +362,8 @@ def create_app(
     # ------------------------------------------------------------------ sessions
     class StartBody(Strict):
         track: str
-        format_id: str
         provider_id: str = Field(max_length=64)
+        format_id: str | None = None  # optional: each interviewer type has one format
 
     @app.post("/api/sessions", dependencies=[Depends(origin_guard)])
     async def start(body: StartBody, request: Request, st=Depends(current_student)):
@@ -367,13 +385,16 @@ def create_app(
             )
         try:
             track = get_track(body.track)
-            fmt = track.format(body.format_id)
+            fmt = track.format(body.format_id) if body.format_id else track.format_for(mode)
         except KeyError as e:
             raise HTTPException(422, "unknown track or format") from e
+        if fmt.modality != mode:
+            raise HTTPException(422, "that format is for the other interviewer")
         key = request.headers.get("idempotency-key", "")
         # No details needed: a student who skipped the form practises on an empty
         # snapshot and the interviewer asks about what it doesn't know.
         async with app.state.pool.connection() as conn, conn.transaction():
+            await plans.ensure_free_grants(conn, st["student_id"], s)
             snap = await _latest_snapshot(conn, st["student_id"])
             if not snap:
                 snap = await _new_snapshot(conn, st["student_id"])

@@ -94,6 +94,24 @@ place of the `--loop` process (Pro plan; it needs `CRON_SECRET`). The API is pub
 3. Deploy. The schema is applied on first start. Seed testers with
    `SEED_PASSWORD=... DATABASE_URL=... python -m interview_api.seed`.
 
+## Free plan and promo codes
+
+Sessions are 2 minutes for video and 3 for voice, three questions each. Free plan:
+one voice session every day, and one video session on each of the first three days
+(Nepal time, no carry-over). More comes from a shared promo code, entered on the
+practice page; each student can use a code once.
+
+```bash
+python -m interview_api.plans create LEEDS2027 --label "Leeds seminar" \
+  --video-sessions 3 --voice-sessions 10 --days 30 --max-uses 50
+python -m interview_api.plans list
+python -m interview_api.plans disable LEEDS2027
+```
+
+Only a hash of each code is stored, so keep the code itself. Wrong codes are limited
+to five an hour per student and per network. On Railway, run these inside the API
+container (`railway ssh --service api`).
+
 ## Before any paid use
 
 Turn on authentication for the ElevenLabs agent and set `ELEVENLABS_API_KEY`; restrict

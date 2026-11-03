@@ -36,6 +36,7 @@ export type Me = {
   display_name: string;
   is_synthetic: boolean;
   balances: { premium_seconds: Balance; basic_seconds: Balance };
+  session_seconds: { avatar: number; voice: number }; // length of one session
   video_available: boolean;
   voice_available: boolean;
 };

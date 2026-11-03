@@ -1,15 +1,16 @@
 "use client";
 
-// The video / voice choice, used on the home page and the interview page. Native
-// radio inputs inside styled labels: keyboard and screen readers get a real choice.
+// The video / voice choice on the practice page. Native radio inputs inside styled
+// labels: keyboard and screen readers get a real choice.
 
 import { TIERS } from "@/lib/copy";
 
 export type TierOption = {
   id: string;
   modality: "avatar" | "voice";
-  minutesLeft?: string | null;
+  left?: string | null; // e.g. "1 session left"
   disabled?: boolean;
+  note?: string; // why it's disabled
 };
 
 type Props = { options: TierOption[]; value: string | null; onChange: (id: string) => void; name?: string };
@@ -29,9 +30,9 @@ export default function TierCards({ options, value, onChange, name = "tier" }: P
             <span className="chips">
               <span className="chip chip--outline">{t.chip}</span>
               {o.disabled ? (
-                <span className="chip chip--outline">Not available right now</span>
+                <span className="chip chip--outline">{o.note ?? "Not available right now"}</span>
               ) : (
-                o.minutesLeft && <span className="chip chip--outline nums">{o.minutesLeft} left</span>
+                o.left && <span className="chip chip--outline nums">{o.left}</span>
               )}
             </span>
           </label>

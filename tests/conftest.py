@@ -32,8 +32,8 @@ HERO_ENV = {
 VIDEO = "liveavatar_embed"
 VOICE = "elevenlabs_voice"
 TRACK = "uk_pre_cas"
-FORMAT = "interview_5m"
-VIDEO_SECONDS = VOICE_SECONDS = 300  # one five-minute format for both tiers
+VIDEO_SECONDS = 120  # the video format: two minutes
+VOICE_SECONDS = 180  # the voice format: three minutes
 
 
 def settings(**kw) -> Settings:
@@ -42,6 +42,9 @@ def settings(**kw) -> Settings:
         cookie_secure=False,
         allowed_origins=(ORIGIN,),
         max_starts_per_10min=50,
+        # Free daily grants are off unless a test turns them on, so balances are exact.
+        free_voice_sessions_per_day=0,
+        free_video_days=0,
     )
     base.update(kw)
     return Settings(**base)
@@ -129,8 +132,9 @@ def key() -> dict:
     return {"idempotency-key": uuid.uuid4().hex}
 
 
-def body(provider_id: str = VIDEO, track: str = TRACK, format_id: str = FORMAT) -> dict:
-    return {"track": track, "format_id": format_id, "provider_id": provider_id}
+def body(provider_id: str = VIDEO, track: str = TRACK, format_id: str | None = None) -> dict:
+    out = {"track": track, "provider_id": provider_id}
+    return {**out, "format_id": format_id} if format_id else out
 
 
 async def start(c, provider_id: str = VIDEO, headers=None, **kw):

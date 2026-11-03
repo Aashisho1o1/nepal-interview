@@ -198,3 +198,10 @@ td:last-child { text-align: right; padding-left: 12px; font-variant-numeric: tab
 .rows h2 { margin-bottom: 2px; }
 .signin { max-width: 440px; margin: 0 auto 48px; scroll-margin-top: 72px; }
 .footer { max-width: 640px; margin: 24px auto 0; padding-top: 24px; border-top: 1px solid var(--line); text-align: center; }
+
+/* "Have a code?" */
+.code-box { margin: 16px 0 0; }
+.code-box label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.code-box .btn-row { flex-wrap: nowrap; }
+.code-box input { flex: 1; min-width: 0; }
+.code-box p { margin: 8px 0 0; }

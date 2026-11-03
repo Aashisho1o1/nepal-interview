@@ -23,7 +23,7 @@ PRIVATE_ENV = {"ELEVENLABS_AGENT_ID": AGENT, "ELEVENLABS_API_KEY": "xi-secret-ke
 
 
 def body(provider_id: str = "elevenlabs_voice") -> dict:
-    return {"track": "uk_pre_cas", "format_id": "interview_5m", "provider_id": provider_id}
+    return {"track": "uk_pre_cas", "provider_id": provider_id}
 
 
 def ctx(**kw) -> LaunchContext:
@@ -110,10 +110,10 @@ async def test_voice_session_reserves_five_minutes_and_passes_session_id(make_en
     r = await c.post("/api/sessions", json=body(), headers=key())
     assert r.status_code == 200, r.text
     s = r.json()
-    assert s["mode"] == "voice" and s["practice_seconds"] == 300
+    assert s["mode"] == "voice" and s["practice_seconds"] == 180
     assert s["launch"]["kind"] == "elevenlabs"
     assert s["launch"]["dynamic_variables"]["session_id"] == s["session_id"]
-    assert (await balance(c, "basic_seconds"))["reserved"] == 300
+    assert (await balance(c, "basic_seconds"))["reserved"] == 180
     # Browser-driven lifecycle: clock starts on connect; the agent hanging up ends it.
     sid = s["session_id"]
     ev = await c.post(

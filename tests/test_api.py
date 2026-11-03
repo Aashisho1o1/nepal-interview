@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import timedelta
 
 import httpx
 import pytest
@@ -27,6 +28,7 @@ from conftest import (
     ready_student,
     start,
 )
+from interview_api import plans
 from interview_api.config import get_settings
 from interview_api.db import RECONCILE_LOCK
 from interview_api.reconcile import reconcile_once
@@ -113,7 +115,7 @@ QUICK = {
 
 
 async def test_about_you_quick_details_reach_the_interviewer(make_env):
-    env = await make_env()
+    env = await make_env(free_voice_sessions_per_day=1, free_video_days=3)
     async with env.client() as c:
         assert (await signup(c, name="Sita")).status_code == 200
         # A new account starts with only its name.
@@ -241,8 +243,8 @@ async def test_insufficient_balance_is_refused(make_env):
     ents = {"premium_seconds": VIDEO_SECONDS + 20, "basic_seconds": 0}
     c = await ready_student(env, entitlements=ents)
     sid = (await start(c)).json()["session_id"]
-    await age_session(env, sid, ready_ago_s=150)
-    assert (await end(c, sid, "deadline")).json()["charged_premium_seconds"] == 150
+    await age_session(env, sid, ready_ago_s=100)
+    assert (await end(c, sid, "deadline")).json()["charged_premium_seconds"] == 100
     r = await start(c)
     assert r.status_code == 402 and r.json()["error"] == "insufficient_balance"
     assert (await start(c, VOICE)).status_code == 402
@@ -427,7 +429,8 @@ async def test_kill_switch_disabled_track_and_rate_limit(make_env):
 async def test_unknown_track_or_format_is_refused(make_env):
     env = await make_env()
     c = await ready_student(env)
-    assert (await start(c, track="ukvi", format_id="interview_5m")).status_code == 422
+    assert (await start(c, track="ukvi")).status_code == 422
+    assert (await start(c, format_id="voice_3m")).status_code == 422  # video with voice format
     assert (await start(c, track="uk_pre_cas", format_id="drill_3m")).status_code == 422
 
 
@@ -441,15 +444,16 @@ async def signup(c, email="new@example.test", name="  Sita   Rai ", password="lo
 
 
 async def test_signup_creates_a_signed_in_student_who_can_practise(make_env):
-    env = await make_env(signup_video_seconds=300, signup_voice_seconds=300)
+    env = await make_env(free_voice_sessions_per_day=1, free_video_days=3)
     async with env.client() as c:
         r = await signup(c, email="New@Example.TEST")
         assert r.status_code == 200, r.text
         me = (await c.get("/api/me")).json()  # the sign-up also signed them in
         assert me["email"] == "new@example.test"
         assert me["display_name"] == "Sita Rai"
-        assert me["balances"]["premium_seconds"]["available"] == 300
-        assert me["balances"]["basic_seconds"]["available"] == 300
+        # Day one of the free plan: one video and one voice session.
+        assert me["balances"]["premium_seconds"]["available"] == VIDEO_SECONDS
+        assert me["balances"]["basic_seconds"]["available"] == VOICE_SECONDS
         assert (await start(c, VOICE)).status_code == 200  # no details needed
         # The new password works for a normal sign-in.
         out = env.client()
@@ -514,6 +518,88 @@ async def test_signup_is_rate_limited_per_network_and_can_be_closed(make_env):
     closed = await make_env(signup_enabled=False)
     async with closed.client() as c:
         assert (await signup(c)).status_code == 403
+
+
+# ---------------------------------------------------------------- free plan and codes
+
+
+async def _student_id(env, email):
+    rows = await env.sql(
+        "SELECT p.id FROM student_profiles p JOIN users u ON u.id=p.user_id WHERE u.email=%s",
+        (email,),
+    )
+    return rows[0]["id"]
+
+
+async def test_free_plan_one_voice_a_day_and_video_on_the_first_three_days(make_env):
+    env = await make_env(free_voice_sessions_per_day=1, free_video_days=3)
+    async with env.client() as c:
+        assert (await signup(c)).status_code == 200
+        sid = (await start(c, VOICE)).json()["session_id"]
+        await age_session(env, sid, ready_ago_s=170)  # they talked for almost all of it
+        await end(c, sid)
+        r = await start(c, VOICE)  # today's free voice session is used
+        assert r.status_code == 402 and "Come back tomorrow" in r.json()["message"]
+    student = await _student_id(env, "new@example.test")
+    joined = (await env.sql("SELECT created_at FROM student_profiles WHERE id=%s", (student,)))[0][
+        "created_at"
+    ]
+    async with env.pool.connection() as conn:
+        for day in (0, 0, 1, 2, 3, 10):  # day 0 twice: grants are idempotent
+            await plans.ensure_free_grants(conn, student, env.s, now=joined + timedelta(days=day))
+    rows = await env.sql(
+        "SELECT bucket, package_version, granted_seconds, expires_at FROM entitlements "
+        "WHERE student_id=%s",
+        (student,),
+    )
+    video = [r for r in rows if r["bucket"] == "premium_seconds"]
+    voice = [r for r in rows if r["bucket"] == "basic_seconds"]
+    assert len(video) == 3 and all(r["granted_seconds"] == VIDEO_SECONDS for r in video)
+    assert len(voice) == 5 and all(r["granted_seconds"] == VOICE_SECONDS for r in voice)
+    for r in rows:  # each grant ends at the next midnight in Nepal
+        local = r["expires_at"].astimezone(plans.NEPAL)
+        assert (local.hour, local.minute) == (0, 0)
+        assert local.date().isoformat() > r["package_version"].split(":")[1]
+
+
+NO_CREDIT = {"premium_seconds": 0, "basic_seconds": 0}
+
+
+async def _make_code(env, code="LEEDS2027", video=3, voice=10, max_uses=None, active=True):
+    await env.sql(
+        "INSERT INTO promo_codes (code_hash, label, premium_seconds, basic_seconds, valid_days, "
+        "max_uses, active) VALUES (%s,'test',%s,%s,30,%s,%s)",
+        (plans.code_hash(code), video * VIDEO_SECONDS, voice * VOICE_SECONDS, max_uses, active),
+    )
+
+
+async def test_shared_code_grants_once_per_student_up_to_its_cap(make_env):
+    env = await make_env()
+    await _make_code(env, max_uses=2)
+    a = await login_student(env, "a@synthetic.test", "A", entitlements=NO_CREDIT)
+    r = await a.post("/api/promo/redeem", json={"code": "  leeds 2027 "})  # case/spaces ignored
+    assert r.status_code == 200, r.text
+    assert r.json() == {"video_sessions": 3, "voice_sessions": 10, "valid_days": 30}
+    assert (await balance(a))["available"] == 3 * VIDEO_SECONDS
+    assert (await balance(a, "basic_seconds"))["available"] == 10 * VOICE_SECONDS
+    assert (await a.post("/api/promo/redeem", json={"code": "LEEDS2027"})).status_code == 409
+    b = await login_student(env, "b@synthetic.test", "B", entitlements=NO_CREDIT)
+    assert (await b.post("/api/promo/redeem", json={"code": "LEEDS2027"})).status_code == 200
+    cc = await login_student(env, "c@synthetic.test", "C", entitlements=NO_CREDIT)
+    r = await cc.post("/api/promo/redeem", json={"code": "LEEDS2027"})
+    assert r.status_code == 410  # cap of two students reached
+    assert (await balance(cc))["available"] == 0
+
+
+async def test_wrong_codes_are_limited_and_disabled_codes_do_nothing(make_env):
+    env = await make_env()
+    await _make_code(env, code="OLDCODE", active=False)
+    c = await login_student(env, "a@synthetic.test", "A", entitlements=NO_CREDIT)
+    assert (await c.post("/api/promo/redeem", json={"code": "OLDCODE"})).status_code == 404
+    for _ in range(4):
+        assert (await c.post("/api/promo/redeem", json={"code": "GUESS"})).status_code == 404
+    r = await c.post("/api/promo/redeem", json={"code": "GUESS"})
+    assert r.status_code == 429 and "Too many tries" in r.json()["detail"]
 
 
 # ---------------------------------------------------------------- reconciliation

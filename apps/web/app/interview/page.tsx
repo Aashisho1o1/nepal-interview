@@ -11,12 +11,20 @@ import Shell from "@/components/Shell";
 import { STAGES } from "@/components/stages";
 import TierCards from "@/components/TierCards";
 import { api, ApiError, firstName, fmtSeconds, Me } from "@/lib/api";
+import CodeBox from "@/components/CodeBox";
 import { DATA_NOTE, DISCLAIMER } from "@/lib/copy";
 import { PHASE_TEXT, type Launch, type Phase, type ProviderInfo, type StageProps, type StartResp } from "@/lib/providers";
 
 const KEY_STORE = "ni-start-key";
 
 type Live = { id: string; launch: Launch };
+
+// Whole sessions the student can still start with this interviewer.
+function sessionsLeft(me: Me, p: ProviderInfo) {
+  const bucket = p.modality === "avatar" ? "premium_seconds" : "basic_seconds";
+  const length = me.session_seconds[p.modality];
+  return length > 0 ? Math.floor(me.balances[bucket].available / length) : 0;
+}
 
 export default function Interview() {
   const router = useRouter();
@@ -38,7 +46,9 @@ export default function Interview() {
       .then(([m, ps]) => {
         setMe(m);
         setProviders(ps);
-        setProviderId((cur) => cur || ps[0]?.id || "");
+        // Preselect the first interviewer the student has a session left for.
+        const usable = ps.find((p) => sessionsLeft(m, p) > 0) ?? ps[0];
+        setProviderId((cur) => cur || usable?.id || "");
       })
       .catch((e) => {
         if (e instanceof ApiError && e.status === 401) router.push("/");
@@ -111,7 +121,7 @@ export default function Interview() {
       const s = await api<StartResp>("/sessions", {
         method: "POST",
         headers: { "idempotency-key": key },
-        json: { track: "uk_pre_cas", format_id: "interview_5m", provider_id: providerId },
+        json: { track: "uk_pre_cas", provider_id: providerId },
       });
       sessionStorage.removeItem(KEY_STORE);
       sessionRef.current = s.session_id;
@@ -133,9 +143,13 @@ export default function Interview() {
     setPhase("idle");
   }
 
-  const minutesFor = (p: ProviderInfo) =>
-    me ? fmtSeconds(me.balances[p.modality === "avatar" ? "premium_seconds" : "basic_seconds"].available) : null;
   const tierOff = (p: ProviderInfo) => (me ? (p.modality === "avatar" ? !me.video_available : !me.voice_available) : false);
+  const used = (p: ProviderInfo) => (me ? sessionsLeft(me, p) === 0 : false);
+  const leftText = (p: ProviderInfo) => {
+    if (!me) return null;
+    const n = sessionsLeft(me, p);
+    return `${n} ${n === 1 ? "session" : "sessions"} left`;
+  };
   const chosen = providers.find((p) => p.id === providerId);
   const Stage = live ? (STAGES[live.launch.kind] as ComponentType<StageProps<Launch>>) : null;
 
@@ -145,12 +159,22 @@ export default function Interview() {
       width="narrow"
       me={me}
       title={live ? "Your practice interview" : me ? `Ready when you are, ${firstName(me)}.` : "Ready when you are."}
-      intro={!live && chosen && minutesFor(chosen) ? `You have ${minutesFor(chosen)} of ${chosen.modality === "avatar" ? "video" : "voice"} practice left.` : undefined}
+      intro={
+        !live && chosen
+          ? `${chosen.modality === "avatar" ? "Two" : "Three"} minutes, three questions. Keep your answers short and direct, like the real interview.`
+          : undefined
+      }
     >
       {!live && (
         <>
           <TierCards
-            options={providers.map((p) => ({ id: p.id, modality: p.modality, minutesLeft: minutesFor(p), disabled: tierOff(p) }))}
+            options={providers.map((p) => ({
+              id: p.id,
+              modality: p.modality,
+              left: leftText(p),
+              disabled: tierOff(p) || used(p),
+              note: tierOff(p) ? undefined : p.modality === "avatar" ? "No video sessions left" : "Next free session tomorrow",
+            }))}
             value={providerId || null}
             onChange={setProviderId}
           />
@@ -160,12 +184,13 @@ export default function Interview() {
               This interviewer doesn&apos;t give written feedback yet. Your session still counts, and you can rate it afterwards.
             </p>
           )}
+          <CodeBox onRedeemed={() => api<Me>("/me").then(setMe).catch(() => undefined)} />
           <p className="small" style={{ margin: "16px 0 0" }}>
             <Link href="/prepare">Add your details</Link> for a more realistic interview.
           </p>
           <p className="caption" style={{ margin: "16px 0 6px" }}>{DATA_NOTE}</p>
           <p className="caption" style={{ margin: "0 0 20px" }}>{DISCLAIMER}</p>
-          <button type="button" className="btn btn-primary btn-block" onClick={start} disabled={phase === "starting" || !me || !providerId || (chosen && tierOff(chosen))}>
+          <button type="button" className="btn btn-primary btn-block" onClick={start} disabled={phase === "starting" || !me || !providerId || (chosen && (tierOff(chosen) || used(chosen)))}>
             {phase === "starting" ? "Starting…" : "Start practice"}
           </button>
         </>

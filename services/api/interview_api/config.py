@@ -42,11 +42,13 @@ class Settings:
     max_starts_per_10min: int = field(default_factory=lambda: _int("MAX_STARTS_PER_10MIN", 6))
     # Refund rule: a session with no student speech that ends within this window.
     no_input_refund_s: int = field(default_factory=lambda: _int("NO_INPUT_REFUND_S", 60))
-    # Open sign-up and the free practice time each new account gets (one session each
-    # by default). Paid packages, consultancies and promo codes come later.
     signup_enabled: bool = field(default_factory=lambda: _bool("SIGNUP_ENABLED", True))
-    signup_video_seconds: int = field(default_factory=lambda: _int("SIGNUP_VIDEO_SECONDS", 300))
-    signup_voice_seconds: int = field(default_factory=lambda: _int("SIGNUP_VOICE_SECONDS", 300))
+    # Free plan (see plans.py): voice sessions every day, and one video session on each
+    # of an account's first N days. 0 turns either off.
+    free_voice_sessions_per_day: int = field(
+        default_factory=lambda: _int("FREE_VOICE_SESSIONS_PER_DAY", 1)
+    )
+    free_video_days: int = field(default_factory=lambda: _int("FREE_VIDEO_DAYS", 3))
     # Kill switches, one per tier.
     video_tier_enabled: bool = field(default_factory=lambda: _bool("VIDEO_TIER_ENABLED", True))
     voice_tier_enabled: bool = field(default_factory=lambda: _bool("VOICE_TIER_ENABLED", True))

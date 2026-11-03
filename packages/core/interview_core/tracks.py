@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 class SessionFormat:
     id: str
     label: str
+    modality: str  # "avatar" (video) or "voice": each interviewer type has one format
     practice_seconds: int
     # Shown to the student. A format is a product choice, not a claim about how long
     # a real interview lasts.
@@ -38,6 +39,12 @@ class TrackSpec:
             if f.id == format_id:
                 return f
         raise KeyError(format_id)
+
+    def format_for(self, modality: str) -> SessionFormat:
+        for f in self.formats:
+            if f.modality == modality:
+                return f
+        raise KeyError(modality)
 
 
 UK_PRE_CAS = TrackSpec(
@@ -66,12 +73,25 @@ UK_PRE_CAS = TrackSpec(
     ),
     must_not_require=("uk.cas_number",),
     formats=(
+        # Short on purpose: real pre-CAS answers are expected to be direct.
         SessionFormat(
-            id="interview_5m",
-            label="Five-minute interview (3 questions)",
-            practice_seconds=300,
+            id="video_2m",
+            label="Two-minute video interview (3 questions)",
+            modality="avatar",
+            practice_seconds=120,
             disclosure=(
-                "A five-minute, three-question practice interview with a fictional AI "
+                "A two-minute, three-question practice interview with a fictional AI "
+                "interviewer. It is not a university or UKVI interview and does not "
+                "predict any decision."
+            ),
+        ),
+        SessionFormat(
+            id="voice_3m",
+            label="Three-minute voice interview (3 questions)",
+            modality="voice",
+            practice_seconds=180,
+            disclosure=(
+                "A three-minute, three-question practice interview with a fictional AI "
                 "interviewer. It is not a university or UKVI interview and does not "
                 "predict any decision."
             ),

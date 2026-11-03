@@ -13,9 +13,9 @@ import { DISCLAIMER, END_REASON, STATUS } from "@/lib/copy";
 type Home = { me: Me; last: SessionSummary | null };
 
 const STEPS: [string, string][] = [
-  ["Create your account", "Free to start. No card needed."],
+  ["Create your account", "Free: a voice session every day, and a video session on each of your first three days."],
   ["Tell us about you", "Five quick details, or skip and practise straight away."],
-  ["Have a conversation", "Video or voice. Five minutes, three questions, out loud, like the real day."],
+  ["Have a conversation", "Video or voice. Three questions, out loud, in two or three minutes."],
   ["See your feedback", "What went well and what to practise, in your own words."],
 ];
 
@@ -149,7 +149,7 @@ export default function HomePage() {
             </button>
             {error && <p className="error" role="alert" style={{ marginTop: 10 }}>{error}</p>}
             <p className="caption" style={{ marginTop: 12 }}>
-              {signup ? "Free practice time to start. No card needed. Already have an account?" : "New here?"}{" "}
+              {signup ? "Free to start. No card needed. Already have an account?" : "New here?"}{" "}
               <button type="button" className="btn btn-ghost" onClick={switchMode}>
                 {signup ? "Sign in" : "Create a free account"}
               </button>

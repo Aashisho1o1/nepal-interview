@@ -189,6 +189,28 @@ CREATE TABLE IF NOT EXISTS session_ratings (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- A shared promo code (one code for many students). Only its SHA-256 is stored.
+CREATE TABLE IF NOT EXISTS promo_codes (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code_hash       TEXT NOT NULL UNIQUE,
+  label           TEXT NOT NULL,
+  premium_seconds INT NOT NULL CHECK (premium_seconds >= 0),
+  basic_seconds   INT NOT NULL CHECK (basic_seconds >= 0),
+  valid_days      INT NOT NULL CHECK (valid_days > 0),   -- how long the granted time lasts
+  max_uses        INT CHECK (max_uses > 0),              -- NULL = no cap
+  uses            INT NOT NULL DEFAULT 0,
+  expires_at      TIMESTAMPTZ,                           -- NULL = never
+  active          BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS promo_redemptions (
+  code_id     UUID NOT NULL REFERENCES promo_codes(id),
+  student_id  UUID NOT NULL REFERENCES student_profiles(id) ON DELETE CASCADE,
+  redeemed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (code_id, student_id)                      -- once per student
+);
+
 -- ---------------------------------------------------------------- migrations
 -- Databases created before 2026-11-02 (own LiveKit pipeline). Safe to re-run.
 ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS provider_id TEXT NOT NULL DEFAULT 'unknown';
@@ -201,3 +223,6 @@ ALTER TABLE interview_sessions DROP COLUMN IF EXISTS display;
 ALTER TABLE interview_sessions DROP COLUMN IF EXISTS room_name;
 ALTER TABLE interview_sessions DROP COLUMN IF EXISTS fallback_at;
 ALTER TABLE interview_sessions DROP COLUMN IF EXISTS room_closed_at;
+-- Free daily grants and promo grants are keyed by package_version: at most one each.
+CREATE UNIQUE INDEX IF NOT EXISTS entitlements_once
+  ON entitlements (student_id, bucket, package_version);
