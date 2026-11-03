@@ -7,6 +7,11 @@ from psycopg_pool import AsyncConnectionPool
 
 SCHEMA = (Path(__file__).parent / "schema.sql").read_text()
 
+# Advisory-lock keys. Transaction-scoped locks only: they also work behind a
+# transaction-mode connection pooler (for example Neon's pooled endpoint).
+SCHEMA_LOCK = 7_301_001
+RECONCILE_LOCK = 7_301_002
+
 
 def make_pool(dsn: str, max_size: int = 20) -> AsyncConnectionPool:
     return AsyncConnectionPool(
@@ -14,12 +19,16 @@ def make_pool(dsn: str, max_size: int = 20) -> AsyncConnectionPool:
         min_size=1,
         max_size=max_size,
         open=False,
-        kwargs={"row_factory": dict_row, "autocommit": True},
+        # No server-side prepared statements, so a transaction-mode pooler is safe.
+        kwargs={"row_factory": dict_row, "autocommit": True, "prepare_threshold": None},
     )
 
 
 async def apply_schema(pool: AsyncConnectionPool) -> None:
-    async with pool.connection() as conn:
+    """Idempotent. Serverless hosts start several instances at once; the lock makes
+    them apply the schema one after another instead of racing on the DDL."""
+    async with pool.connection() as conn, conn.transaction():
+        await conn.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK,))
         await conn.execute(SCHEMA)
 
 

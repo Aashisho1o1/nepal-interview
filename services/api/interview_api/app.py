@@ -1,7 +1,9 @@
-"""Session API: browser endpoints under /api (cookie auth, same-origin via the Next.js
-proxy). Vendor keys never leave this process."""
+"""Session API: browser endpoints under /api (cookie auth, same origin as the website:
+Vercel routes /api/* here, locally the Next.js dev proxy does). Vendor keys never leave
+this process."""
 
 import asyncio
+import hmac
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -30,10 +32,10 @@ from .auth import (
     verify_password,
 )
 from .config import Settings, get_settings
-from .db import apply_schema, audit, make_pool
+from .db import RECONCILE_LOCK, apply_schema, audit, make_pool
 from .providers import LaunchContext, ProviderError, load_registry
 from .quota import QuotaError, balances, settle_session, start_session
-from .reconcile import close_vendor
+from .reconcile import close_vendor, reconcile_once
 
 log = logging.getLogger("interview_api")
 
@@ -578,6 +580,27 @@ def create_app(
                 ),
             )
         return {"ok": True}
+
+    # Called every minute by Vercel Cron (see vercel.json). Each step is idempotent; the
+    # lock stops an overlapping or duplicate delivery from running alongside.
+    @app.get("/api/internal/reconcile", include_in_schema=False)
+    async def cron_reconcile(request: Request):
+        given = request.headers.get("authorization", "")
+        if not s.cron_secret or not hmac.compare_digest(
+            given.encode(), f"Bearer {s.cron_secret}".encode()
+        ):
+            raise HTTPException(401, "unauthorized")
+        pool = app.state.pool
+        async with pool.connection() as conn, conn.transaction():
+            cur = await conn.execute(
+                "SELECT pg_try_advisory_xact_lock(%s) AS ok", (RECONCILE_LOCK,)
+            )
+            if not (await cur.fetchone())["ok"]:
+                return {"skipped": "already running"}
+            report = await reconcile_once(pool, s, app.state.providers)
+        if any(report.values()):
+            log.info("reconcile", extra=report)
+        return report
 
     @app.get("/healthz")
     async def healthz():

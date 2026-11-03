@@ -25,6 +25,8 @@ from conftest import (
     ready_student,
     start,
 )
+from interview_api.config import get_settings
+from interview_api.db import RECONCILE_LOCK
 from interview_api.reconcile import reconcile_once
 from interview_api.transcripts import Turn, UsageEvent, ingest_transcript, record_usage
 
@@ -369,6 +371,40 @@ async def test_reconciler_reclaims_startup_timeouts_and_stale_sessions(make_env)
     assert (await balance(b, "basic_seconds"))["consumed"] == 30
     rep2 = await reconcile_once(env.pool, env.s, env.registry, feedback_grace_s=0)
     assert rep2 == {"startup_timeouts": 0, "stale_active": 0, "closed": 0, "graded": 0}
+
+
+async def test_cron_reconcile_route_needs_the_secret_and_skips_overlapping_runs(make_env):
+    env = await make_env(cron_secret="s3cret-for-tests-only")
+    path = "/api/internal/reconcile"
+    async with env.client() as c:
+        assert (await c.get(path)).status_code == 401
+        assert (await c.get(path, headers={"authorization": "Bearer wrong"})).status_code == 401
+        ok = {"authorization": "Bearer s3cret-for-tests-only"}
+        r = await c.get(path, headers=ok)
+        assert r.status_code == 200
+        assert r.json() == {"startup_timeouts": 0, "stale_active": 0, "closed": 0, "graded": 0}
+        # Another run holds the lock: a duplicate delivery does nothing.
+        async with env.pool.connection() as conn, conn.transaction():
+            await conn.execute("SELECT pg_advisory_xact_lock(%s)", (RECONCILE_LOCK,))
+            assert (await c.get(path, headers=ok)).json() == {"skipped": "already running"}
+
+
+async def test_cron_reconcile_route_is_closed_without_a_configured_secret(make_env):
+    env = await make_env(cron_secret="")
+    async with env.client() as c:
+        r = await c.get("/api/internal/reconcile", headers={"authorization": "Bearer "})
+        assert r.status_code == 401
+
+
+def test_vercel_deployment_urls_are_trusted_origins(monkeypatch):
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://practice.example")
+    monkeypatch.setenv("VERCEL_URL", "proj-abc123.vercel.app")
+    monkeypatch.setenv("VERCEL_BRANCH_URL", "")
+    monkeypatch.delenv("VERCEL_PROJECT_PRODUCTION_URL", raising=False)
+    assert get_settings().allowed_origins == (
+        "https://practice.example",
+        "https://proj-abc123.vercel.app",
+    )
 
 
 @pytest.mark.parametrize("n_students", [5])

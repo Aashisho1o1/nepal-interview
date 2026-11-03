@@ -21,10 +21,13 @@ class Settings:
         )
     )
     allowed_origins: tuple[str, ...] = field(
-        default_factory=lambda: tuple(
-            o.strip()
-            for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
-            if o.strip()
+        default_factory=lambda: (
+            tuple(
+                o.strip()
+                for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+                if o.strip()
+            )
+            + _vercel_origins()
         )
     )
     cookie_secure: bool = field(default_factory=lambda: _bool("COOKIE_SECURE", True))
@@ -47,11 +50,25 @@ class Settings:
     grader_model: str = field(default_factory=lambda: os.getenv("GRADER_MODEL", ""))
     price_table_path: str | None = field(default_factory=lambda: os.getenv("PRICE_TABLE_PATH"))
     providers_file: str | None = field(default_factory=lambda: os.getenv("PROVIDERS_FILE"))
+    # Vercel Cron sends "Authorization: Bearer <CRON_SECRET>" to the reconcile route.
+    # Unset means the route refuses every call.
+    cron_secret: str = field(default_factory=lambda: os.getenv("CRON_SECRET", ""))
     # Browser heartbeats get generous slack: mobile browsers throttle timers when the
     # screen dims.
     client_heartbeat_timeout_s: int = field(
         default_factory=lambda: _int("CLIENT_HEARTBEAT_TIMEOUT_S", 90)
     )
+
+
+def _vercel_origins() -> tuple[str, ...]:
+    """This deployment's own addresses on Vercel (system variables, set by the
+    platform). Trusting them lets preview and production URLs pass the origin check
+    without listing each one in ALLOWED_ORIGINS. Custom domains still go there."""
+    hosts = (
+        os.getenv(k, "").strip()
+        for k in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL")
+    )
+    return tuple(f"https://{h}" for h in hosts if h)
 
 
 def get_settings() -> Settings:

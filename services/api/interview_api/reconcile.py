@@ -1,7 +1,8 @@
 """Reconciliation: reclaim expired reservations, stop vendor sessions, grade stragglers.
 
-Run as a separate long-lived process (`python -m interview_api.reconcile --loop`) or
-call `reconcile_once` from tests. Each step is idempotent.
+Locally, run as a long-lived process (`python -m interview_api.reconcile --loop`). On
+Vercel, a cron job calls GET /api/internal/reconcile every minute instead. Each step is
+idempotent.
 
 1. Live sessions that never became ready within the startup budget -> settle as
    failed startup (full refund) and ask the vendor to stop.

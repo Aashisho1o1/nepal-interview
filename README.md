@@ -67,6 +67,24 @@ TEST_DATABASE_URL=postgresql://localhost/ni_test uv run pytest -q
 cd apps/web && npx eslint && npx tsc --noEmit && npm run build
 ```
 
+## Deploy on Vercel
+
+`vercel.json` deploys one project with two services on one domain: `web` (Next.js,
+`apps/web`) for every page, and `api` (FastAPI, entry `asgi.py`) for `/api/*`. Neither
+calls the other server-side; the browser calls `/api` on the same domain, so the login
+cookie stays first-party. A cron job calls `/api/internal/reconcile` every minute in
+place of the `--loop` process (Pro plan; it needs `CRON_SECRET`). The API is public at
+`/api/*` for testing only; see `AGENTS.md` for making it private before real students.
+
+1. Create Postgres (for example Neon from the Vercel Marketplace, Singapore region) and
+   set the project's Function Region to match. The pooled connection string is fine.
+2. Set the API variables from `.env.example` in the project, plus `CRON_SECRET`.
+   `COOKIE_SECURE=true`, `ELEVENLABS_ALLOW_PUBLIC_AGENT=false`. Add a custom domain to
+   `ALLOWED_ORIGINS`; the project's own `*.vercel.app` addresses are trusted
+   automatically.
+3. Deploy. The schema is applied on first start. Seed testers with
+   `SEED_PASSWORD=... DATABASE_URL=... python -m interview_api.seed`.
+
 ## Before any paid use
 
 Turn on authentication for the ElevenLabs agent and set `ELEVENLABS_API_KEY`; restrict
