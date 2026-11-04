@@ -6,7 +6,7 @@ export const DATA_NOTE =
   "Your voice and the details you give are sent to the AI services that run the interviewer. Our small team reads sessions and ratings to improve the practice.";
 
 // Google Form for the paid-version waiting list. Empty = the button shows "opening soon".
-export const WAITLIST_URL = "";
+export const WAITLIST_URL = "https://forms.gle/U4SiZez78g8QS4Fu5";
 
 export const TIERS = {
   avatar: {
