@@ -110,10 +110,10 @@ async def test_voice_session_reserves_five_minutes_and_passes_session_id(make_en
     r = await c.post("/api/sessions", json=body(), headers=key())
     assert r.status_code == 200, r.text
     s = r.json()
-    assert s["mode"] == "voice" and s["practice_seconds"] == 180
+    assert s["mode"] == "voice" and s["practice_seconds"] == 120
     assert s["launch"]["kind"] == "elevenlabs"
     assert s["launch"]["dynamic_variables"]["session_id"] == s["session_id"]
-    assert (await balance(c, "basic_seconds"))["reserved"] == 180
+    assert (await balance(c, "basic_seconds"))["reserved"] == 120
     # Browser-driven lifecycle: clock starts on connect; the agent hanging up ends it.
     sid = s["session_id"]
     ev = await c.post(

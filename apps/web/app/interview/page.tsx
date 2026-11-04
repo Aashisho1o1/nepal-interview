@@ -162,7 +162,7 @@ export default function Interview() {
       title={live ? "Your practice interview" : me ? `Ready when you are, ${firstName(me)}.` : "Ready when you are."}
       intro={
         !live && chosen
-          ? `${chosen.modality === "avatar" ? "Two" : "Three"} minutes, three questions. Keep your answers short and direct, like the real interview.`
+          ? "Two minutes, three questions. Keep your answers short and direct, like the real interview."
           : undefined
       }
     >

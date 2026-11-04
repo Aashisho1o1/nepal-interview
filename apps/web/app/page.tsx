@@ -17,7 +17,7 @@ type Home = { me: Me; last: SessionSummary | null };
 const STEPS: [string, string][] = [
   ["Create your account", "Free: a voice session every day, and a video session on each of your first three days."],
   ["Tell us about you", "Five quick details, or skip and practise straight away."],
-  ["Have a conversation", "Video or voice. Three questions, out loud, in two or three minutes."],
+  ["Have a conversation", "Video or voice. Three questions, out loud, in two minutes."],
   ["See your feedback", "What went well and what to practise, in your own words."],
 ];
 

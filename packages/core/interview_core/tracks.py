@@ -86,12 +86,12 @@ UK_PRE_CAS = TrackSpec(
             ),
         ),
         SessionFormat(
-            id="voice_3m",
-            label="Three-minute voice interview (3 questions)",
+            id="voice_2m",
+            label="Two-minute voice interview (3 questions)",
             modality="voice",
-            practice_seconds=180,
+            practice_seconds=120,
             disclosure=(
-                "A three-minute, three-question practice interview with a fictional AI "
+                "A two-minute, three-question practice interview with a fictional AI "
                 "interviewer. It is not a university or UKVI interview and does not "
                 "predict any decision."
             ),

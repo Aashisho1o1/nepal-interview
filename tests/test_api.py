@@ -430,7 +430,7 @@ async def test_unknown_track_or_format_is_refused(make_env):
     env = await make_env()
     c = await ready_student(env)
     assert (await start(c, track="ukvi")).status_code == 422
-    assert (await start(c, format_id="voice_3m")).status_code == 422  # video with voice format
+    assert (await start(c, format_id="voice_2m")).status_code == 422  # video with voice format
     assert (await start(c, track="uk_pre_cas", format_id="drill_3m")).status_code == 422
 
 

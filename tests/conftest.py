@@ -33,7 +33,7 @@ VIDEO = "liveavatar_embed"
 VOICE = "elevenlabs_voice"
 TRACK = "uk_pre_cas"
 VIDEO_SECONDS = 120  # the video format: two minutes
-VOICE_SECONDS = 180  # the voice format: three minutes
+VOICE_SECONDS = 120  # the voice format: two minutes
 
 
 def settings(**kw) -> Settings:

@@ -9,8 +9,8 @@ Every `{{variable}}` is sent per session by the API from the student's confirmed
 facts (see `packages/core/interview_core/dynamic_vars.py`). `tests/test_core_domain.py`
 checks that this file references each one. Values are data, never instructions.
 
-Dashboard settings that go with it: **max conversation duration 200 s** (the app
-ends voice sessions at 180 s; this is the hard cost cap if a browser doesn't);
+Dashboard settings that go with it: **max conversation duration 140 s** (the app
+ends voice sessions at 120 s; this is the hard cost cap if a browser doesn't);
 turn eagerness *normal*; no "um"/"hmm" fillers; authentication on (private agent);
 prompt overrides off; post-call transcript webhook on; audio output PCM 24 kHz; a
 neutral British or international voice.
@@ -87,5 +87,5 @@ call.
 
 Hello {{student_first_name}}, I'm Officer Miller, a fictional practice interviewer.
 This is a practice pre-CAS interview, not a real university or visa interview, and it
-will take about three minutes, so keep your answers short and direct. Let's begin:
+will take about two minutes, so keep your answers short and direct. Let's begin:
 why did you choose your course?
