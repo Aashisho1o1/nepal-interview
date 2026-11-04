@@ -52,6 +52,13 @@ class Settings:
     # Kill switches, one per tier.
     video_tier_enabled: bool = field(default_factory=lambda: _bool("VIDEO_TIER_ENABLED", True))
     voice_tier_enabled: bool = field(default_factory=lambda: _bool("VOICE_TIER_ENABLED", True))
+    # Founders who can open /team (every session, rating and transcript). Comma-separated
+    # sign-in emails; empty means nobody.
+    team_emails: frozenset[str] = field(
+        default_factory=lambda: frozenset(
+            e.strip().lower() for e in os.getenv("TEAM_EMAILS", "").split(",") if e.strip()
+        )
+    )
     grader: str = field(default_factory=lambda: os.getenv("GRADER", "rules"))
     openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
     grader_model: str = field(default_factory=lambda: os.getenv("GRADER_MODEL", ""))

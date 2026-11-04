@@ -608,6 +608,60 @@ def create_app(
             },
         }
 
+    # ------------------------------------------------------------------ team review
+    async def team_member(st=Depends(current_student)):
+        # 404, not 403: students should not learn that the page exists.
+        if st["email"].lower() not in s.team_emails:
+            raise HTTPException(404, "not found")
+        return st
+
+    @app.get("/api/team/sessions", dependencies=[Depends(team_member)])
+    async def team_sessions(limit: int = 200):
+        """Recent sessions from every student with their rating, feedback and
+        transcript, so the founders can see how practice went. Read-only."""
+        limit = max(1, min(limit, 500))
+        async with app.state.pool.connection() as conn:
+            cur = await conn.execute(
+                """SELECT s.id, s.created_at, s.mode, s.status, s.end_reason,
+                          s.practice_seconds, s.media_ready_at, s.ended_at,
+                          p.display_name AS name, u.email,
+                          r.realism, r.reply_speed, r.audio_video_ok, r.would_use_again,
+                          r.comment, f.status AS feedback_status, f.validated_json AS feedback
+                   FROM interview_sessions s
+                   JOIN student_profiles p ON p.id = s.student_id
+                   JOIN users u ON u.id = p.user_id
+                   LEFT JOIN session_ratings r ON r.session_id = s.id
+                   LEFT JOIN feedback_reports f ON f.session_id = s.id
+                   ORDER BY s.created_at DESC LIMIT %s""",
+                (limit,),
+            )
+            rows = await cur.fetchall()
+            cur = await conn.execute(
+                """SELECT session_id, speaker, text FROM interview_turns
+                   WHERE session_id = ANY(%s) AND NOT canceled
+                   ORDER BY session_id, sequence, start_ms""",
+                ([r["id"] for r in rows],),
+            )
+            turns: dict = {}
+            for t in await cur.fetchall():
+                turns.setdefault(t["session_id"], []).append(
+                    {"speaker": t["speaker"], "text": t["text"]}
+                )
+        out = []
+        for r in rows:
+            ready, ended = r.pop("media_ready_at"), r.pop("ended_at")
+            out.append(
+                {
+                    **r,
+                    "id": str(r["id"]),
+                    "talked_seconds": int((ended - ready).total_seconds())
+                    if ready and ended
+                    else None,
+                    "turns": turns.get(r["id"], []),
+                }
+            )
+        return out
+
     # ------------------------------------------------------------------ shared session events
     async def _apply_event(conn, sess, kind: str, payload: dict, source: str):
         """Lifecycle events reported by the student's browser (and settlement by the API)."""

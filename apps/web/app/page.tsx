@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
+import Waitlist from "@/components/Waitlist";
 import { api, ApiError, firstName, Me, SessionSummary } from "@/lib/api";
 import { DISCLAIMER, END_REASON, STATUS } from "@/lib/copy";
 
@@ -108,11 +109,16 @@ export default function HomePage() {
       ) : (
         <>
           <section className="hero">
-            <span className="chip chip--outline">UK pre-CAS interview practice · Early access</span>
-            <h1 className="display">Practise your pre-CAS interview before the real one.</h1>
+            <span className="chip chip--outline">Student visa interview practice · Early access</span>
+            <h1 className="display">Practise your student interview before the real one.</h1>
             <p className="lead">
-              Practise with an AI interviewer on a <strong>video call</strong> or an <strong>audio call</strong>, and get feedback
-              after every session.
+              <em>
+                Practise with an <strong>AI interviewer</strong> on a <strong>video call</strong> or an <strong>audio call</strong>,
+                and get feedback after every session.
+              </em>
+            </p>
+            <p className="small">
+              Early access covers the UK pre-CAS interview. The US, Europe and Australia are coming soon.
             </p>
             <button type="button" className="btn btn-primary" onClick={startFree}>Start practising free</button>
             <div className="card demo" aria-label="Example of a practice exchange" style={{ marginTop: 28 }}>
@@ -197,6 +203,8 @@ export default function HomePage() {
               </p>
             </form>
       )}
+
+      <Waitlist />
 
       <footer className="footer">
         <p className="caption">{DISCLAIMER}</p>

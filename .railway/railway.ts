@@ -43,6 +43,8 @@ export default defineRailway((ctx) => {
     ELEVENLABS_BRANCH_ID: ctx.shared.ELEVENLABS_BRANCH_ID,
     ELEVENLABS_API_KEY: ctx.shared.ELEVENLABS_API_KEY,
     LIVEAVATAR_EMBED_URL: ctx.shared.LIVEAVATAR_EMBED_URL,
+    // Founders' sign-in emails, comma-separated: they can open /team. Missing = nobody.
+    TEAM_EMAILS: ctx.shared.TEAM_EMAILS,
   };
 
   const api = service("api", {

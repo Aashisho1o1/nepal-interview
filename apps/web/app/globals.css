@@ -211,3 +211,11 @@ td:last-child { text-align: right; padding-left: 12px; font-variant-numeric: tab
 .code-box .btn-row { flex-wrap: nowrap; }
 .code-box input { flex: 1; min-width: 0; }
 .code-box p { margin: 8px 0 0; }
+
+/* Team review page */
+.team-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 0 0 16px; }
+.team-sum .card { margin: 0; }
+.team-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 4px; }
+.team-head .chip { margin-left: auto; }
+.team-row p { margin: 0 0 8px; }
+.hero .small { margin: -12px 0 24px; }

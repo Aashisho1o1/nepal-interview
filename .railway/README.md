@@ -21,7 +21,8 @@ redeploys the services whose watched paths changed.
 3. In that project, open Project Settings > Shared Variables (production) and add:
    `ELEVENLABS_AGENT_ID`, `ELEVENLABS_API_KEY`, `LIVEAVATAR_EMBED_URL`, and
    `ELEVENLABS_BRANCH_ID` if you use a branch. Enable authentication on the agent; the
-   API refuses a public agent here.
+   API refuses a public agent here. Add `TEAM_EMAILS` (founders' sign-in emails,
+   comma-separated) to let them open `/team`, the review of every session.
 4. From the repo root:
 
    ```bash

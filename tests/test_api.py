@@ -703,3 +703,38 @@ async def test_cumulative_usage_only_increases(make_env):
             await record_usage(conn, env.app.state.prices, sid, ev(q))
     rows = await env.sql("SELECT quantity FROM usage_ledger")
     assert len(rows) == 1 and rows[0]["quantity"] == 90
+
+
+# ---------------------------------------------------------------- team review
+
+
+async def test_team_sees_every_session_with_rating_and_transcript(make_env):
+    env = await make_env(team_emails=frozenset({"founder@synthetic.test"}))
+    student = await ready_student(env, "a@synthetic.test", "Student A")
+    founder = await ready_student(env, "founder@synthetic.test", "Founder")
+
+    sid = (await start(student, VOICE)).json()["session_id"]
+    await media_ready(student, sid)
+    await ingest_transcript(env.pool, env.s, sid, TURNS)
+    await age_session(env, sid, ready_ago_s=60)
+    await end(student, sid)
+    rating = {
+        "realism": 2,
+        "reply_speed": "noticeably_slow",
+        "audio_video_ok": True,
+        "would_use_again": False,
+        "comment": "The interviewer cut me off.",
+    }
+    assert (await student.post(f"/api/sessions/{sid}/rating", json=rating)).status_code == 200
+
+    # Students (and signed-out visitors) cannot tell the page exists.
+    assert (await student.get("/api/team/sessions")).status_code == 404
+    assert (await env.client().get("/api/team/sessions")).status_code == 401
+
+    r = await founder.get("/api/team/sessions")
+    assert r.status_code == 200, r.text
+    [row] = r.json()
+    assert row["id"] == sid and row["email"] == "a@synthetic.test" and row["mode"] == "voice"
+    assert row["realism"] == 2 and row["comment"] == "The interviewer cut me off."
+    assert row["talked_seconds"] >= 60
+    assert [t["speaker"] for t in row["turns"]] == ["interviewer", "student", "student"]
