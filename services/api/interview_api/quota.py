@@ -9,8 +9,8 @@ Invariants (tested in tests/test_api.py):
 * Charged seconds: whole seconds rounded down, from media-ready to the end, capped at
   the reservation. Startup is never charged to the student. Provider startup costs
   are still recorded in usage_ledger.
-* Failed startup (media never ready) and very short sessions with no student speech
-  are refunded in full.
+* Failed startup (media never ready) is refunded in full; so are very short sessions
+  with no student speech when NO_INPUT_REFUND_S is set.
 * A session belongs to one tier: video sessions charge the premium bucket, voice
   sessions the basic bucket.
 """

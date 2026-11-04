@@ -8,7 +8,7 @@ import json
 import httpx
 import pytest
 
-from conftest import balance, key, ready_student
+from conftest import VOICE, balance, key, ready_student
 from interview_api.config import Settings
 from interview_api.providers import (
     DEFAULT_PROVIDERS_FILE,
@@ -100,6 +100,16 @@ async def test_token_failure_is_a_provider_error(status, payload):
     )
     with pytest.raises(ProviderError):
         await reg.get("elevenlabs_voice").launch(ctx())
+
+
+async def test_token_failure_settles_the_session_and_the_student_can_retry(make_env):
+    env = await make_env(provider_env=PRIVATE_ENV, provider_http=token_http([], 401, {"detail": "bad key"}))
+    c = await ready_student(env)
+    r = await c.post("/api/sessions", json=body(VOICE), headers=key())
+    assert r.status_code == 502 and r.json()["error"] == "provider_failed"
+    assert (await balance(c, "basic_seconds"))["reserved"] == 0
+    r = await c.post("/api/sessions", json=body(VOICE), headers=key())
+    assert r.status_code == 502  # not 409 session_already_live
 
 
 async def test_voice_session_reserves_five_minutes_and_passes_session_id(make_env):

@@ -41,7 +41,8 @@ class Settings:
     teardown_grace_s: int = field(default_factory=lambda: _int("TEARDOWN_GRACE_S", 30))
     max_starts_per_10min: int = field(default_factory=lambda: _int("MAX_STARTS_PER_10MIN", 6))
     # Refund rule: a session with no student speech that ends within this window.
-    no_input_refund_s: int = field(default_factory=lambda: _int("NO_INPUT_REFUND_S", 60))
+    # Off (0) until a provider sends transcripts: without them every short call looks silent.
+    no_input_refund_s: int = field(default_factory=lambda: _int("NO_INPUT_REFUND_S", 0))
     signup_enabled: bool = field(default_factory=lambda: _bool("SIGNUP_ENABLED", True))
     # Free plan (see plans.py): voice sessions every day, and one video session on each
     # of an account's first N days. 0 turns either off.

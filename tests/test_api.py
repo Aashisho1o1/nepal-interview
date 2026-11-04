@@ -283,7 +283,7 @@ async def test_failed_connection_restores_entitlement(make_env):
 
 
 async def test_no_student_speech_is_refunded(make_env):
-    env = await make_env()
+    env = await make_env(no_input_refund_s=60)
     c = await ready_student(env)
     sid = (await start(c, VOICE)).json()["session_id"]
     await age_session(env, sid, ready_ago_s=40)

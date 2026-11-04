@@ -438,7 +438,16 @@ def create_app(
                 practice_seconds=sess["practice_seconds"],
             ),
         )
-        launch = await _launch_once(prov, sess, ctx) if prov.stateful else await prov.launch(ctx)
+        try:
+            launch = await _launch_once(prov, sess, ctx) if prov.stateful else await prov.launch(ctx)
+        except ProviderError as e:
+            log.warning("provider %s launch failed: %s", prov.spec.id, e)
+            await settle_session(app.state.pool, s, sess["id"], "provider_launch_failed")
+            raise QuotaError(
+                502,
+                "provider_failed",
+                "The interviewer could not start. Nothing was charged; please try again.",
+            ) from e
         launch = {k: v for k, v in launch.items() if k != "vendor_ref"}
         out = {
             "session_id": str(sess["id"]),
@@ -477,16 +486,7 @@ def create_app(
                     raise QuotaError(409, "session_ended", "That session could not start.")
                 await asyncio.sleep(0.25)
             raise QuotaError(409, "launch_in_progress", "Still connecting; try again.")
-        try:
-            launch = await prov.launch(ctx)
-        except ProviderError as e:
-            log.warning("provider %s launch failed: %s", prov.spec.id, e)
-            await settle_session(app.state.pool, s, sess["id"], "provider_launch_failed")
-            raise QuotaError(
-                502,
-                "provider_failed",
-                "The interviewer could not start. Nothing was charged; please try again.",
-            ) from e
+        launch = await prov.launch(ctx)
         async with app.state.pool.connection() as conn:
             await conn.execute(
                 "UPDATE interview_sessions SET launch_json=%s, vendor_ref=%s WHERE id=%s",

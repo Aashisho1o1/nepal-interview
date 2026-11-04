@@ -128,7 +128,9 @@ export default function Interview() {
       setLive({ id: s.session_id, launch: s.launch });
       setPhase("connecting");
     } catch (e) {
-      sessionStorage.removeItem(KEY_STORE);
+      // Keep the key when the server never answered or is still connecting, so the
+      // retry returns the same session instead of hitting "session already live".
+      if (e instanceof ApiError && e.code !== "launch_in_progress") sessionStorage.removeItem(KEY_STORE);
       setPhase("error");
       if (e instanceof ApiError && e.code === "session_already_live") setLiveConflict(String(e.body.session_id ?? ""));
       setError(e instanceof ApiError ? e.message : "Could not start.");
