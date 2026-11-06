@@ -52,6 +52,11 @@ redeploys the services whose watched paths changed.
 
 ## Later changes
 
+**Do not run `railway config apply` for now.** A plan on 2026-11-06 showed it would delete
+the production database: the live database is named `Postgres`, and `railway.ts` says
+`postgres`. It would also repoint variables on `api` and `worker`. Change variables in the
+dashboard until the file matches and a plan shows 0 to destroy.
+
 Edit `railway.ts`, then `railway config plan` and `railway config apply`. A resource
 removed from the file is deleted on apply; the CLI marks it as destructive first.
 Secrets stay in Shared Variables, never in this file.

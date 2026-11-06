@@ -8,6 +8,7 @@ import { TIERS } from "@/lib/copy";
 export type TierOption = {
   id: string;
   modality: "avatar" | "voice";
+  label?: string; // tells apart two interviewers of one kind
   left?: string | null; // e.g. "1 session left"
   disabled?: boolean;
   note?: string; // why it's disabled
@@ -25,7 +26,7 @@ export default function TierCards({ options, value, onChange, name = "tier" }: P
             <input type="radio" name={name} value={o.id} checked={value === o.id} disabled={o.disabled} onChange={() => onChange(o.id)} />
             <span className="dot" aria-hidden="true" />
             {o.modality === "avatar" ? <VideoIcon /> : <VoiceIcon />}
-            <span className="tier-title">{t.title}</span>
+            <span className="tier-title">{o.label ?? t.title}</span>
             <span className="small">{t.desc}</span>
             <span className="chips">
               <span className="chip chip--outline">{t.chip}</span>

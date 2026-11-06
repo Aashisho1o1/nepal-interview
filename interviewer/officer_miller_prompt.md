@@ -15,8 +15,9 @@ turn eagerness *normal*; no "um"/"hmm" fillers; authentication on (private agent
 prompt overrides off; post-call transcript webhook on; audio output PCM 24 kHz; a
 neutral British or international voice.
 
-The video interviewer (2 minutes) is configured separately in the HeyGen LiveAvatar
-dashboard and receives none of these variables yet.
+The current embed (2 minutes) is configured separately in the HeyGen LiveAvatar dashboard
+and receives none of these variables. Video A and Video B use a copy of this agent: Video
+B sends the variables, Video A sends them blank. See `docs/PROVIDERS.md`.
 
 ---
 

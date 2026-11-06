@@ -174,6 +174,7 @@ export default function Interview() {
             options={providers.map((p) => ({
               id: p.id,
               modality: p.modality,
+              label: p.label,
               left: leftText(p),
               disabled: tierOff(p) || used(p),
               note: tierOff(p) ? undefined : p.modality === "avatar" ? "No video sessions left" : "Next free session tomorrow",

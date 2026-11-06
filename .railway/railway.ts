@@ -43,6 +43,13 @@ export default defineRailway((ctx) => {
     ELEVENLABS_BRANCH_ID: ctx.shared.ELEVENLABS_BRANCH_ID,
     ELEVENLABS_API_KEY: ctx.shared.ELEVENLABS_API_KEY,
     LIVEAVATAR_EMBED_URL: ctx.shared.LIVEAVATAR_EMBED_URL,
+    // Side-by-side video cards (docs/PROVIDERS.md). Missing = that card isn't offered.
+    ELEVENLABS_VIDEO_AGENT_ID: ctx.shared.ELEVENLABS_VIDEO_AGENT_ID,
+    LIVEAVATAR_API_KEY: ctx.shared.LIVEAVATAR_API_KEY,
+    LIVEAVATAR_AVATAR_ID: ctx.shared.LIVEAVATAR_AVATAR_ID,
+    LIVEAVATAR_ELEVENLABS_SECRET_ID: ctx.shared.LIVEAVATAR_ELEVENLABS_SECRET_ID,
+    KEYFRAME_API_KEY: ctx.shared.KEYFRAME_API_KEY,
+    KEYFRAME_PERSONA: ctx.shared.KEYFRAME_PERSONA,
     // Founders' sign-in emails, comma-separated: they can open /team. Missing = nobody.
     TEAM_EMAILS: ctx.shared.TEAM_EMAILS,
   };

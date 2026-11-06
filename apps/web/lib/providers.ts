@@ -38,7 +38,17 @@ export type ElevenLabsLaunch = {
   dynamic_variables: Record<string, string>;
 };
 
-export type Launch = IframeLaunch | ElevenLabsLaunch;
+// Video agents: an avatar SDK in the browser, voiced by our ElevenLabs agent.
+export type LiveAvatarLaunch = { kind: "liveavatar"; session_token: string };
+
+export type KeyframeLaunch = {
+  kind: "keyframe";
+  session_details: { server_url: string; participant_token: string; agent_identity: string };
+  voice_agent: { type: "elevenlabs"; agent_id: string; signed_url: string };
+  dynamic_variables: Record<string, string>;
+};
+
+export type Launch = IframeLaunch | ElevenLabsLaunch | LiveAvatarLaunch | KeyframeLaunch;
 
 export type StartResp = {
   session_id: string;

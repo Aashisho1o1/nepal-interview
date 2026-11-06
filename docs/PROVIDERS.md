@@ -31,6 +31,54 @@ The target for the video tier is LiveAvatar's session-token flow driven by the s
 ElevenLabs agent (facts and transcripts included); see
 `docs/ELEVENLABS_LIVEAVATAR_FOCUS.md` §6.
 
+## Side-by-side video cards
+
+**Video A** is HeyGen LiveAvatar in LITE mode (1 credit a minute). **Video B** is Keyframe.
+Both are only the face: the voice and the logic come from one ElevenLabs agent. A card
+stays hidden, for everyone, until all its settings exist, so add vendor keys whenever you
+buy the plan.
+
+| | Video A (HeyGen LITE) | Video B (Keyframe) |
+|---|---|---|
+| Student details | Not sent: its token request goes through HeyGen, so the agent asks instead | Browser sends them to ElevenLabs only |
+| Student's voice | Reaches HeyGen, which runs the bridge to ElevenLabs | Reaches ElevenLabs only |
+| Agent's voice | Reaches HeyGen | Reaches Keyframe |
+| Server can stop a call | Yes, with a hard time limit | No; the agent's max duration is the backstop |
+
+Anything said aloud reaches the avatar vendor with that audio, so an agent that speaks a
+student's name or figures sends them too.
+
+Setup, once:
+
+1. **ElevenLabs:** duplicate the interviewer agent, so voice calls aren't touched. On the
+   copy set audio **output and input to PCM 24000 Hz** and max conversation duration to
+   **180 s**. Its id is `ELEVENLABS_VIDEO_AGENT_ID`. A paid plan is required.
+2. **HeyGen:** at app.liveavatar.com get an API key (`LIVEAVATAR_API_KEY`) and an avatar id
+   (`LIVEAVATAR_AVATAR_ID`). Make a new ElevenLabs key just for HeyGen, with an expiry and
+   only `convai_read`, `user_read`, `voices_read`. Register it, in your own terminal:
+   ```
+   curl -X POST https://api.liveavatar.com/v1/secrets -H "X-API-KEY: $LIVEAVATAR_API_KEY" \
+     -H "Content-Type: application/json" -d '{"secret_type": "ELEVENLABS_API_KEY",
+     "secret_value": "<that key>", "secret_name": "interviewer"}'
+   ```
+   `data.id` in the reply is `LIVEAVATAR_ELEVENLABS_SECRET_ID`.
+3. **Keyframe:** at platform.keyframelabs.com get an API key (`KEYFRAME_API_KEY`) and pick a
+   stock avatar for `KEYFRAME_PERSONA` (for example `public:cosmo_persona-1.5-live`).
+   Video B also uses the existing `ELEVENLABS_API_KEY`.
+4. **Railway, in the dashboard:** add those under Project Settings > Shared Variables, share
+   each with both `api` and `worker`, then deploy the staged changes. The worker needs them
+   too, or it can't stop abandoned calls. **Do not run `railway config apply`** (see
+   `.railway/README.md`).
+
+Things to check in the first real calls, which no automated test can: closing the tab
+mid-call (does Keyframe stop using minutes?), a phone on mobile data, iPhone sound (tap the
+video if it's silent), and an agent hang-up (the browser console shows the stop event).
+
+**Choosing:** in `config/providers.json` set `"enabled": false` on the losers, and set the
+winner's `"label"` to `"Video interviewer"`. `scripts/provider_comparison.py` shows results
+by card. The current embed is listed at 2 credits a minute, so turn it off first if credits
+run short.
+
 ## Switch or add a provider
 
 - **Turn providers on/off or reorder:** edit `config/providers.json` (`enabled`, order),

@@ -7,7 +7,7 @@ branches on a vendor name.
 
 A provider answers three questions:
   * launch(ctx)   -> what the browser needs to show the interview (a "launch" dict
-                     whose `kind` picks a frontend stage: "iframe" or "elevenlabs")
+                     whose `kind` picks a frontend stage in components/stages)
   * close(sess)   -> best-effort stop of anything still running at the vendor
   * stateful      -> does launching create something at the vendor that must be
                      created exactly once per session?
@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -31,10 +32,12 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from interview_core.dynamic_vars import build_dynamic_variables
+
 log = logging.getLogger("interview_api.providers")
 
 DEFAULT_PROVIDERS_FILE = Path(__file__).resolve().parents[3] / "config" / "providers.json"
-INTEGRATIONS = ("iframe_embed", "elevenlabs_agent")
+INTEGRATIONS = ("iframe_embed", "elevenlabs_agent", "liveavatar_lite", "keyframe_persona")
 
 
 class ProviderError(Exception):
@@ -79,7 +82,7 @@ class LaunchContext:
 class InterviewProvider(Protocol):
     spec: ProviderSpec
     stateful: bool
-    transport: str  # "iframe" | "elevenlabs"
+    transport: str  # same as the launch kind
 
     async def launch(self, ctx: LaunchContext) -> dict[str, Any]: ...
 
@@ -103,6 +106,34 @@ def _checked_url(url: str, allowed_hosts: list[str]) -> str:
 def _origin(url: str) -> str:
     p = urlsplit(url)
     return f"{p.scheme}://{p.netloc}"
+
+
+async def _vendor_json(vendor: str, request: Awaitable[httpx.Response]) -> dict[str, Any]:
+    """A vendor's JSON reply. Anything else is a ProviderError (refund and retry), never a
+    raw 500."""
+    try:
+        r = await request
+        if r.status_code >= 400:
+            raise ProviderError(f"{vendor} {r.status_code}: {r.text[:300]}")
+        data = r.json()
+    except (httpx.HTTPError, ValueError) as e:
+        raise ProviderError(f"{vendor} unreachable or bad reply: {e!r}") from e
+    if not isinstance(data, dict):
+        raise ProviderError(f"{vendor} returned unexpected JSON")
+    return data
+
+
+def _blank_variables(ctx: LaunchContext) -> dict[str, str]:
+    """The same prompt as voice, with nothing about the student: the agent asks instead
+    ("not provided" means ask). For a path where the variables would pass through the
+    avatar vendor."""
+    return build_dynamic_variables(
+        session_id=ctx.session_id,
+        student_name="",
+        facts={},
+        funding=None,
+        practice_seconds=ctx.practice_seconds,
+    )
 
 
 # --------------------------------------------------------------------------- iframe
@@ -203,23 +234,177 @@ class ElevenLabsAgentProvider:
         params = {"agent_id": self.agent_id}
         if self.branch_id:
             params["branch_id"] = self.branch_id
-        try:
-            r = await self.http.get(
+        reply = await _vendor_json(
+            "elevenlabs",
+            self.http.get(
                 f"{self.API}/convai/conversation/token",
                 params=params,
                 headers={"xi-api-key": self.api_key},
-            )
-        except httpx.HTTPError as e:
-            raise ProviderError(f"elevenlabs unreachable: {e!r}") from e
-        if r.status_code >= 400:
-            raise ProviderError(f"elevenlabs {r.status_code}: {r.text[:300]}")
-        token = r.json().get("token")
+            ),
+        )
+        token = reply.get("token")
         if not token:
             raise ProviderError("elevenlabs returned no token")
         return {**out, "conversation_token": token}
 
     async def close(self, sess: dict[str, Any]) -> bool:
         return True  # ends when the browser disconnects; agent max duration is the backstop
+
+
+# --------------------------------------------------------------------------- video agents
+
+
+class LiveAvatarLiteProvider:
+    """LiveAvatar in LITE ("avatar only") mode: it draws the face, and our ElevenLabs agent
+    listens, thinks and talks through LiveAvatar's connector. We mint a session token per
+    session; the browser SDK starts the session with it. The server can stop it, and
+    max_session_duration caps it at the vendor. The token request goes through LiveAvatar,
+    so it carries no student details."""
+
+    stateful = True
+    transport = "liveavatar"
+    API = "https://api.liveavatar.com/v1"
+
+    def __init__(
+        self,
+        spec: ProviderSpec,
+        *,
+        api_key: str,
+        avatar_id: str,
+        secret_id: str,
+        agent_id: str,
+        sandbox: bool = False,
+        http: httpx.AsyncClient | None = None,
+    ):
+        self.spec, self.api_key, self.avatar_id = spec, api_key, avatar_id
+        self.secret_id, self.agent_id, self.sandbox = secret_id, agent_id, sandbox
+        self.http = http or httpx.AsyncClient(timeout=15)
+
+    def session_providers(self) -> dict[str, Any]:
+        return {
+            "provider_id": self.spec.id,
+            "integration": self.spec.integration,
+            "transport": self.transport,
+            "vendor": self.spec.vendor,
+        }
+
+    async def launch(self, ctx: LaunchContext) -> dict[str, Any]:
+        reply = await _vendor_json(
+            "liveavatar",
+            self.http.post(
+                f"{self.API}/sessions/token",
+                headers={"X-API-KEY": self.api_key},
+                json={
+                    "mode": "LITE",
+                    "avatar_id": self.avatar_id,
+                    "is_sandbox": self.sandbox,
+                    # Sandbox refuses anything over 60 s.
+                    "max_session_duration": 60 if self.sandbox else ctx.max_vendor_seconds,
+                    "video_settings": {"quality": "medium", "encoding": "H264"},
+                    "elevenlabs_agent_config": {
+                        "secret_id": self.secret_id,
+                        "agent_id": self.agent_id,
+                        "dynamic_variables": _blank_variables(ctx),
+                    },
+                },
+            ),
+        )
+        data = reply.get("data") or {}
+        if not data.get("session_token") or not data.get("session_id"):
+            raise ProviderError("liveavatar returned no session token")
+        return {
+            "kind": "liveavatar",
+            "session_token": data["session_token"],
+            "vendor_ref": data["session_id"],
+        }
+
+    async def close(self, sess: dict[str, Any]) -> bool:
+        if not sess.get("vendor_ref"):
+            return True  # nothing was ever created at the vendor
+        try:
+            r = await self.http.post(
+                f"{self.API}/sessions/stop",
+                headers={"X-API-KEY": self.api_key},
+                json={"session_id": sess["vendor_ref"], "reason": "USER_CLOSED"},
+                timeout=5,
+            )
+        except httpx.HTTPError as e:
+            log.warning("liveavatar stop failed: %r", e)
+            return False
+        # The browser SDK stops the session too, and the reply to a second stop isn't
+        # documented. Other 4xx can't be fixed by retrying, so they count as closed.
+        return r.status_code < 500 and r.status_code not in (401, 403, 408, 429)
+
+
+class KeyframeProvider:
+    """A Keyframe avatar driven by our ElevenLabs agent. The browser talks to ElevenLabs
+    over a signed URL, sending the student's voice and details there only, and passes the
+    agent's audio to Keyframe to animate. Both keys stay here. Keyframe documents no server
+    stop or per-session cap: the browser disconnecting ends it, and the video agent's max
+    duration is the backstop."""
+
+    stateful = True
+    transport = "keyframe"
+    API = "https://api.keyframelabs.com/v1"
+    ELEVENLABS_API = "https://api.elevenlabs.io/v1"
+
+    def __init__(
+        self,
+        spec: ProviderSpec,
+        *,
+        api_key: str,
+        persona: str,
+        agent_id: str,
+        elevenlabs_key: str,
+        http: httpx.AsyncClient | None = None,
+    ):
+        self.spec, self.api_key, self.persona = spec, api_key, persona
+        self.agent_id, self.elevenlabs_key = agent_id, elevenlabs_key
+        self.http = http or httpx.AsyncClient(timeout=15)
+
+    def session_providers(self) -> dict[str, Any]:
+        return {
+            "provider_id": self.spec.id,
+            "integration": self.spec.integration,
+            "transport": self.transport,
+            "vendor": self.spec.vendor,
+        }
+
+    async def launch(self, ctx: LaunchContext) -> dict[str, Any]:
+        signed = await _vendor_json(
+            "elevenlabs",
+            self.http.get(
+                f"{self.ELEVENLABS_API}/convai/conversation/get-signed-url",
+                params={"agent_id": self.agent_id},
+                headers={"xi-api-key": self.elevenlabs_key},
+            ),
+        )
+        session = await _vendor_json(
+            "keyframe",
+            self.http.post(
+                f"{self.API}/sessions",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json={"persona_slug": self.persona},
+            ),
+        )
+        try:
+            details = {k: session[k] for k in ("server_url", "participant_token", "agent_identity")}
+            voice_agent = {
+                "type": "elevenlabs",
+                "agent_id": self.agent_id,
+                "signed_url": signed["signed_url"],
+            }
+        except KeyError as e:
+            raise ProviderError(f"keyframe launch reply is missing {e}") from e
+        return {
+            "kind": "keyframe",
+            "session_details": details,
+            "voice_agent": voice_agent,
+            "dynamic_variables": ctx.dynamic_variables,
+        }
+
+    async def close(self, sess: dict[str, Any]) -> bool:
+        return True  # nothing to call; see the class comment
 
 
 # --------------------------------------------------------------------------- registry
@@ -290,6 +475,25 @@ def load_registry(
         try:
             if raw["integration"] == "iframe_embed":
                 prov: InterviewProvider = IframeEmbedProvider(spec, env[raw["url_env"]])
+            elif raw["integration"] == "liveavatar_lite":
+                prov = LiveAvatarLiteProvider(
+                    spec,
+                    api_key=env["LIVEAVATAR_API_KEY"],
+                    avatar_id=env["LIVEAVATAR_AVATAR_ID"],
+                    secret_id=env["LIVEAVATAR_ELEVENLABS_SECRET_ID"],
+                    agent_id=env["ELEVENLABS_VIDEO_AGENT_ID"],
+                    sandbox=env.get("LIVEAVATAR_SANDBOX", "").lower() in ("1", "true"),
+                    http=http,
+                )
+            elif raw["integration"] == "keyframe_persona":
+                prov = KeyframeProvider(
+                    spec,
+                    api_key=env["KEYFRAME_API_KEY"],
+                    persona=env["KEYFRAME_PERSONA"],
+                    agent_id=env["ELEVENLABS_VIDEO_AGENT_ID"],
+                    elevenlabs_key=env["ELEVENLABS_API_KEY"],
+                    http=http,
+                )
             else:  # elevenlabs_agent
                 key = env.get("ELEVENLABS_API_KEY") or None
                 public_ok = env.get("ELEVENLABS_ALLOW_PUBLIC_AGENT", "").lower() in ("1", "true")

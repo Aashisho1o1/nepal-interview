@@ -5,7 +5,8 @@
 The app is launched on Railway (`.railway/railway.ts`, steps in `.railway/README.md`).
 There the API is already private: only the website is public, and it proxies `/api/*`
 to the API over Railway's private network. Never give the `api` or `worker` service a
-public domain.
+public domain. Never run `railway config apply` until a plan shows 0 to destroy: as of
+2026-11-06 it would delete the production database (`.railway/README.md`).
 
 ## Open TODO if Vercel is used again: make the API private (owner decision, 2026-11-02)
 

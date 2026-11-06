@@ -439,7 +439,9 @@ def create_app(
             ),
         )
         try:
-            launch = await _launch_once(prov, sess, ctx) if prov.stateful else await prov.launch(ctx)
+            launch = (
+                await _launch_once(prov, sess, ctx) if prov.stateful else await prov.launch(ctx)
+            )
         except ProviderError as e:
             log.warning("provider %s launch failed: %s", prov.spec.id, e)
             await settle_session(app.state.pool, s, sess["id"], "provider_launch_failed")
@@ -593,7 +595,7 @@ def create_app(
         caps = prov.spec.capabilities if prov else {}
         return {
             "session": _public(sess),
-            "provider": {"transcripts": bool(caps.get("transcripts", True))},
+            "provider": {"transcripts": bool(caps.get("transcripts", False))},
             "rating": rating,
             "turns": turns,
             "feedback": None

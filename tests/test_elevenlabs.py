@@ -50,7 +50,7 @@ def token_http(calls: list, status: int = 200, payload: dict | None = None):
 def test_students_are_offered_only_elevenlabs_and_liveavatar():
     raw = json.loads(DEFAULT_PROVIDERS_FILE.read_text())
     enabled = {p["id"] for p in raw["providers"] if p.get("enabled")}
-    assert enabled == {"liveavatar_embed", "elevenlabs_voice"}
+    assert enabled == {"liveavatar_embed", "video_a", "video_b", "elevenlabs_voice"}
     s = Settings(database_url="unused")
     env = {**PUBLIC_ENV, "LIVEAVATAR_EMBED_URL": "https://embed.liveavatar.com/v1/x"}
     reg = load_registry(s, env=env)
