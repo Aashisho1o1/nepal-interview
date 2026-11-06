@@ -21,6 +21,11 @@ export const TIERS = {
   },
 } as const;
 
+// A small line on one interviewer's card, by provider id.
+export const CARD_NOTE: Record<string, string> = {
+  video_a: "Available for free users",
+};
+
 export const END_REASON: Record<string, string> = {
   student_ended: "You ended it",
   deadline: "Time ran out",

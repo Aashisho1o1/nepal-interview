@@ -3,7 +3,7 @@
 // The video / voice choice on the practice page. Native radio inputs inside styled
 // labels: keyboard and screen readers get a real choice.
 
-import { TIERS } from "@/lib/copy";
+import { CARD_NOTE, TIERS } from "@/lib/copy";
 
 export type TierOption = {
   id: string;
@@ -28,6 +28,7 @@ export default function TierCards({ options, value, onChange, name = "tier" }: P
             {o.modality === "avatar" ? <VideoIcon /> : <VoiceIcon />}
             <span className="tier-title">{o.label ?? t.title}</span>
             <span className="small">{t.desc}</span>
+            {CARD_NOTE[o.id] && <span className="caption">{CARD_NOTE[o.id]}</span>}
             <span className="chips">
               <span className="chip chip--outline">{t.chip}</span>
               {o.disabled ? (
