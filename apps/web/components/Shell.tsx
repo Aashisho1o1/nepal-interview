@@ -45,7 +45,7 @@ export default function Shell({ step, title, intro, width = "page", me: given, l
         <div className="header-in">
           <Link className="brand" href="/">
             <Logo />
-            Interview Practice
+            Victoria
           </Link>
           <div className="header-right">
             {me ? (

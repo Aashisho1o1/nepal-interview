@@ -9,10 +9,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import Shell from "@/components/Shell";
 import { STAGES } from "@/components/stages";
+import { checkMicrophone } from "@/components/stages/trackCall";
 import TierCards from "@/components/TierCards";
 import { api, ApiError, firstName, fmtSeconds, Me } from "@/lib/api";
 import CodeBox from "@/components/CodeBox";
-import { DATA_NOTE, DISCLAIMER } from "@/lib/copy";
+import { DATA_NOTE, DISCLAIMER, micErrorMessage } from "@/lib/copy";
 import { PHASE_TEXT, type Launch, type Phase, type ProviderInfo, type StageProps, type StartResp } from "@/lib/providers";
 
 const KEY_STORE = "ni-start-key";
@@ -111,6 +112,14 @@ export default function Interview() {
     setLiveConflict(null);
     endedRef.current = false;
     setPhase("starting");
+    // Before anything is reserved, so a blocked microphone uses no session.
+    try {
+      await checkMicrophone();
+    } catch (e) {
+      setPhase("error");
+      setError(micErrorMessage(e));
+      return;
+    }
     // One key per intended start, reused on retry so the server returns the same session.
     let key = sessionStorage.getItem(KEY_STORE);
     if (!key) {
@@ -164,7 +173,7 @@ export default function Interview() {
       title={live ? "Your practice interview" : me ? `Ready when you are, ${firstName(me)}.` : "Ready when you are."}
       intro={
         !live && chosen
-          ? "Two minutes, three questions. Keep your answers short and direct, like the real interview."
+          ? "Two minutes, three questions. Keep your answers short and direct."
           : undefined
       }
     >
@@ -190,7 +199,8 @@ export default function Interview() {
             </p>
           )}
           <p className="caption" style={{ margin: "16px 0 6px" }}>{chosen?.data_note} {DATA_NOTE}</p>
-          <p className="caption" style={{ margin: "0 0 20px" }}>{DISCLAIMER}</p>
+          <p className="caption" style={{ margin: "0 0 6px" }}>{DISCLAIMER}</p>
+          <p className="caption" style={{ margin: "0 0 20px" }}>Your browser will ask to use your microphone. Tap Allow.</p>
           <button type="button" className="btn btn-primary btn-block" onClick={start} disabled={phase === "starting" || !me || !providerId || (chosen && (tierOff(chosen) || used(chosen)))}>
             {phase === "starting" ? "Starting…" : "Start practice"}
           </button>

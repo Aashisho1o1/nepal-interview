@@ -140,11 +140,13 @@ export default function AboutYou() {
                 <tr><td>Your funds</td><td>{fmtMinor(funding.identified_funds_minor, funding.currency)}</td></tr>
                 <tr>
                   <td><strong>Difference</strong></td>
-                  <td className={funding.gap_minor > 0 ? "bad" : "good"}>
+                  <td className={funding.gap_minor > 0 ? "bad" : undefined}>
                     <strong>
                       {funding.gap_minor > 0
                         ? `${fmtMinor(funding.gap_minor, funding.currency)} short`
-                        : `Covered (+${fmtMinor(funding.surplus_minor, funding.currency)})`}
+                        : funding.surplus_minor > 0
+                          ? `${fmtMinor(funding.surplus_minor, funding.currency)} more than the amount to fund`
+                          : "Same as the amount to fund"}
                     </strong>
                   </td>
                 </tr>

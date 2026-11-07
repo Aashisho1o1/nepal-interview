@@ -25,7 +25,7 @@
     },
     {
       "id": "video_a",
-      "label": "Video A",
+      "label": "Video call",
       "vendor": "HeyGen LiveAvatar (LITE, ElevenLabs connector)",
       "integration": "liveavatar_lite",
       "modality": "avatar",
@@ -73,7 +73,7 @@
       "requires_env": [
         "ELEVENLABS_AGENT_ID"
       ],
-      "data_note": "Audio only, lower data use. Your voice and confirmed details are sent to the AI service that runs the interviewer.",
+      "data_note": "Audio only. Your voice and confirmed details are sent to the AI service that runs the interviewer.",
       "capabilities": {
         "transcripts": false,
         "student_facts": true,

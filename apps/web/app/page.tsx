@@ -16,7 +16,7 @@ type Home = { me: Me; last: SessionSummary | null };
 
 const STEPS: [string, string][] = [
   ["Create your account", "Free: a voice session every day, and a video session on each of your first three days."],
-  ["Tell us about you", "Five quick details, or skip and practise straight away."],
+  ["Add your details, if you like", "Optional. Only voice calls use them, so you can go straight to practice."],
   ["Have a conversation", "Video or voice. Three questions, out loud, in two minutes."],
 ];
 
@@ -60,7 +60,7 @@ export default function HomePage() {
     try {
       if (signup) {
         await api("/auth/signup", { method: "POST", json: { name, email, password } });
-        router.push("/prepare"); // "About you", which they can skip
+        router.push("/interview");
         return;
       }
       await api("/auth/login", { method: "POST", json: { email, password } });
@@ -108,27 +108,16 @@ export default function HomePage() {
       ) : (
         <>
           <section className="hero">
-            <span className="chip chip--outline">Student visa interview practice · Early access</span>
-            <h1 className="display">Practise your student interview before the real one.</h1>
+            <span className="chip chip--outline">Visa Interview Practice</span>
+            <h1 className="display">Don&apos;t freeze when your UK university asks “Why this course?”</h1>
             <p className="lead">
-              <em>
-                Practise with an <strong>AI interviewer</strong> on a <strong>video call</strong> or an <strong>audio call</strong>.
-              </em>
+              Practise speaking out loud with a fictional AI interviewer on a two-minute video or audio call. Get used to
+              answering on the spot, in your own words, before your real pre-CAS interview.
             </p>
             <p className="small">
               Early access covers the UK pre-CAS interview. The US, Europe and Australia are coming soon.
             </p>
             <button type="button" className="btn btn-primary" onClick={startFree}>Start practising free</button>
-            <div className="card demo" aria-label="Example of a practice exchange" style={{ marginTop: 28 }}>
-              <div>
-                <span className="who">Visa interviewer (AI)</span>
-                <span className="bubble q">Why did you choose this course?</span>
-              </div>
-              <div className="a-wrap">
-                <span className="who">Visa applicant (you)</span>
-                <span className="bubble a">I chose MSc Data Science because its machine learning modules build on my…</span>
-              </div>
-            </div>
           </section>
 
         </>

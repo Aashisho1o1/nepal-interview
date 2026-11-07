@@ -14,20 +14,29 @@ export const WAITLIST_URL = "https://forms.gle/U4SiZez78g8QS4Fu5";
 export const TIERS = {
   avatar: {
     title: "Video interviewer",
-    desc: "See a friendly face while you talk. Feels closest to the real thing.",
+    desc: "See your interviewer while you talk. Your camera stays off.",
     chip: "Best on Wi-Fi",
   },
   voice: {
     title: "Voice only",
-    desc: "Just talk, no camera. Works well even on slower connections.",
-    chip: "Works on mobile data",
+    desc: "Just talk, no camera. Uses any details you added.",
+    chip: "Audio only",
   },
 } as const;
 
-// A small line on one interviewer's card, by provider id.
-export const CARD_NOTE: Record<string, string> = {
-  video_a: "Available for free users",
-};
+// Why the microphone check failed, by the browser's error name.
+export function micErrorMessage(e: unknown) {
+  switch (e instanceof Error ? e.name : "") {
+    case "NotAllowedError":
+      return "Your microphone is blocked, so your session hasn't started. Allow it in your browser settings and try again. If you opened this inside Facebook or another app, open it in Chrome or Safari.";
+    case "NotFoundError":
+      return "We can't find a microphone on this device, so your session hasn't started. Connect one or try another device.";
+    case "NotReadableError":
+      return "Another app may be using your microphone, so your session hasn't started. Close it and try again.";
+    default:
+      return "This browser can't use your microphone, so your session hasn't started. Open this page in Chrome or Safari and try again.";
+  }
+}
 
 export const END_REASON: Record<string, string> = {
   student_ended: "You ended it",

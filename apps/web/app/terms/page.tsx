@@ -4,13 +4,13 @@ import type { Metadata } from "next";
 import Shell from "@/components/Shell";
 import { CONTACT_EMAIL, DISCLAIMER } from "@/lib/copy";
 
-export const metadata: Metadata = { title: "Terms · Interview Practice" };
+export const metadata: Metadata = { title: "Terms · Victoria" };
 
 export default function Terms() {
   return (
     <Shell title="Terms" intro="Last updated 6 November 2026">
       <div className="legal">
-        <p>By creating an account or using Interview Practice at nepali.global, you agree to these terms.</p>
+        <p>By creating an account or using Victoria at nepali.global, you agree to these terms.</p>
 
         <h2>This is practice only</h2>
         <p>{DISCLAIMER}</p>

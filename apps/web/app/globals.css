@@ -1,5 +1,5 @@
 /* Editorial minimal: white canvas, near-black text, hairline borders, one action
-   colour (black). Coral is the logo and line icons only. No gradients, no shadows. */
+   colour (coral, dark enough for white text). No gradients, no shadows. */
 :root {
   --bg: #ffffff;
   --surface-2: #f5f5f7;
@@ -10,6 +10,8 @@
   --line: #e5e5ea;
   --line-strong: #d2d2d7;
   --brand: #e4573d;
+  --action: #cf3f25;
+  --action-hover: #b53520;
   --sun: #ffc94d;
   --link: #0066cc;
   --good: #17794f;
@@ -85,8 +87,8 @@ main.narrow { max-width: var(--w-narrow); }
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .btn:hover { text-decoration: none; }
-.btn-primary { background: var(--ink); color: #fff; }
-.btn-primary:hover:not(:disabled) { background: var(--ink-2); }
+.btn-primary { background: var(--action); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--action-hover); }
 .btn-secondary { border-color: var(--line-strong); }
 .btn-secondary:hover:not(:disabled) { border-color: var(--ink); }
 .btn-danger { background: var(--bad); color: #fff; }
@@ -188,14 +190,6 @@ td:last-child { text-align: right; padding-left: 12px; font-variant-numeric: tab
 
 /* ---------- home ---------- */
 .hero { max-width: 640px; margin: 24px auto 40px; }
-.demo { margin: 0 0 20px; }
-.bubble { display: inline-block; max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 15px; line-height: 1.4; }
-.bubble.q { background: var(--surface-2); border-bottom-left-radius: 6px; }
-.bubble.a { border: 1px solid var(--brand); border-bottom-right-radius: 6px; }
-.demo .a-wrap { text-align: right; }
-.demo .who { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 4px; }
-.demo .a-wrap .who { margin-top: 14px; }
-.lead strong { color: var(--ink); font-weight: 600; }
 .section { max-width: 640px; margin: 0 auto 48px; }
 .rows > div { display: grid; grid-template-columns: 36px 1fr; gap: 0 8px; padding: 16px 0; border-top: 1px solid var(--line); }
 .rows > div:first-child { border-top: 0; }

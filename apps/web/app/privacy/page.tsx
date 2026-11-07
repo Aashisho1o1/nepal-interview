@@ -5,14 +5,14 @@ import type { Metadata } from "next";
 import Shell from "@/components/Shell";
 import { CONTACT_EMAIL } from "@/lib/copy";
 
-export const metadata: Metadata = { title: "Privacy Policy · Interview Practice" };
+export const metadata: Metadata = { title: "Privacy Policy · Victoria" };
 
 export default function Privacy() {
   return (
     <Shell title="Privacy Policy" intro="Last updated 6 November 2026">
       <div className="legal">
         <p>
-          Interview Practice at nepali.global is run by a small team. This page explains what we collect when you use
+          Victoria at nepali.global is run by a small team. This page explains what we collect when you use
           it and what we do with it.
         </p>
 
