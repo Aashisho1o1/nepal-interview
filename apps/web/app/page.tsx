@@ -1,8 +1,8 @@
 "use client";
 
-// Home. Signed out: what this is, how it works, then one form at the bottom to create
-// an account or sign in.
-// Video or voice is chosen later, on the practice page. Signed in: where to pick up.
+// Home, the same page for everyone: what this is, the demos and how it works. Signed out,
+// one form at the bottom creates an account or signs in. Signed in, the button goes to
+// practice and the last session is linked. Video or voice is chosen on the practice page.
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import DemoClip from "@/components/DemoClip";
 import Shell from "@/components/Shell";
 import Waitlist from "@/components/Waitlist";
-import { api, ApiError, firstName, Me, SessionSummary } from "@/lib/api";
+import { api, ApiError, Me, SessionSummary } from "@/lib/api";
 import { DISCLAIMER, END_REASON, STATUS } from "@/lib/copy";
 
 type Home = { me: Me; last: SessionSummary | null };
@@ -74,6 +74,7 @@ export default function HomePage() {
 
   // Scrolls to the form in sign-up mode. Not a "#signin" link: that hash means sign in.
   function startFree() {
+    if (home) return router.push("/interview");
     setAccount("signup");
     setError("");
     document.getElementById("signin")?.scrollIntoView({ block: "start" });
@@ -87,43 +88,26 @@ export default function HomePage() {
 
   return (
     <Shell width="wide" me={home === undefined ? undefined : (home?.me ?? null)}>
-      {home ? (
-        <section className="section cards">
-          <h1>Welcome back, {firstName(home.me)}.</h1>
-          <div className="card card-strong">
-            <h2>Ready to practise?</h2>
-            <p className="small">Pick video or voice on the next page.</p>
-            <div className="btn-row">
-              <Link href="/interview" className="btn btn-primary">Practise now</Link>
-              <Link href="/prepare" className="btn btn-secondary">Update my details</Link>
-            </div>
-          </div>
-          {home.last && (
-            <p className="small" style={{ marginTop: 16 }}>
-              Last session: <span className="nums">{new Date(home.last.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span> ·{" "}
-              {home.last.mode === "avatar" ? "Video" : "Voice"} · {home.last.end_reason === "deadline" ? "Time ran out" : STATUS[home.last.status] ?? END_REASON[home.last.end_reason ?? ""] ?? "Ended"}{" "}
-              <Link href={`/sessions/${home.last.id}`}>See session →</Link>
-            </p>
-          )}
-        </section>
-      ) : (
-        <>
-          <section className="hero">
-            <span className="chip chip--outline">Visa Interview Practice</span>
-            <h1 className="display">Don&apos;t freeze when your UK university asks “Why this course?”</h1>
-            <p className="lead">
-              Practise speaking out loud with a fictional AI interviewer on a two-minute video or audio call. Get used to
-              answering on the spot, in your own words, before your real pre-CAS interview.
-            </p>
-            <p className="small">
-              Early access covers the UK pre-CAS interview. The US, Europe and Australia are coming soon.
-            </p>
-            <button type="button" className="btn btn-primary" onClick={startFree}>Start practising free</button>
-            <DemoClip onTry={startFree} />
-          </section>
-
-        </>
-      )}
+      <section className="hero">
+        <span className="chip chip--outline">Visa Interview Practice</span>
+        <h1 className="display">Don&apos;t freeze when your UK university asks “Why this course?”</h1>
+        <p className="lead">
+          Practise speaking out loud with a fictional AI interviewer on a two-minute video or audio call. Get used to
+          answering on the spot, in your own words, before your real pre-CAS interview.
+        </p>
+        <p className="small">
+          Early access covers the UK pre-CAS interview. The US, Europe and Australia are coming soon.
+        </p>
+        <button type="button" className="btn btn-primary" onClick={startFree}>{home ? "Practise now" : "Start practising free"}</button>
+        {home?.last && (
+          <p className="small" style={{ margin: "12px 0 0" }}>
+            Last session: <span className="nums">{new Date(home.last.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span> ·{" "}
+            {home.last.mode === "avatar" ? "Video" : "Voice"} · {home.last.end_reason === "deadline" ? "Time ran out" : STATUS[home.last.status] ?? END_REASON[home.last.end_reason ?? ""] ?? "Ended"}{" "}
+            <Link href={`/sessions/${home.last.id}`}>See session →</Link>
+          </p>
+        )}
+        <DemoClip onTry={startFree} />
+      </section>
 
       <section className="section" id="how">
         <p className="eyebrow">How it works</p>

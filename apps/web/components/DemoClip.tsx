@@ -18,6 +18,8 @@ export default function DemoClip({ onTry }: { onTry: () => void }) {
 
   return (
     <div className="clip">
+      <h2>Recorded Demos</h2>
+      <p className="small">Click on the play button to play the demo video recordings.</p>
       <div className="seg" role="group" aria-label="Choose a demo">
         {(Object.keys(CLIPS) as Mode[]).map((m) => (
           <button
