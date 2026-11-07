@@ -86,7 +86,7 @@ async def test_lite_token_uses_the_agent_and_sends_no_student_details(make_env):
     env, c = await student(make_env, vendors)
     r = await start(c, LITE)
     assert r.status_code == 200, r.text
-    assert r.json()["launch"] == {"kind": "liveavatar", "session_token": "la-tok"}
+    assert r.json()["launch"] == {"kind": "video_a", "session_token": "la-tok"}
     (req,) = vendors.to("/v1/sessions/token")
     assert req.headers["x-api-key"] == "la-secret"
     sent = json.loads(req.content)
@@ -108,7 +108,7 @@ async def test_keyframe_launch_keeps_keys_here_and_details_away_from_keyframe(ma
     r = await start(c, KEYFRAME)
     assert r.status_code == 200, r.text
     launch = r.json()["launch"]
-    assert launch["kind"] == "keyframe"
+    assert launch["kind"] == "video_b"
     assert launch["session_details"] == {
         "server_url": "wss://rtc.test",
         "participant_token": "kf-tok",

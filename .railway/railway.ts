@@ -89,7 +89,6 @@ export default defineRailway((ctx) => {
     env: {
       // Read when the site is built: Next.js bakes its /api proxy target in.
       SESSION_API_ORIGIN: `http://api.railway.internal:${API_PORT}`,
-      EMBED_ORIGINS: "https://embed.liveavatar.com",
     },
   });
 

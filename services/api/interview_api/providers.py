@@ -199,7 +199,7 @@ class ElevenLabsAgentProvider:
     """
 
     stateful = False
-    transport = "elevenlabs"
+    transport = "voice_call"
     API = "https://api.elevenlabs.io/v1"
 
     def __init__(
@@ -225,7 +225,7 @@ class ElevenLabsAgentProvider:
 
     async def launch(self, ctx: LaunchContext) -> dict[str, Any]:
         out: dict[str, Any] = {
-            "kind": "elevenlabs",
+            "kind": "voice_call",
             "connection_type": "webrtc",
             "dynamic_variables": ctx.dynamic_variables,
         }
@@ -262,7 +262,7 @@ class LiveAvatarLiteProvider:
     so it carries no student details."""
 
     stateful = True
-    transport = "liveavatar"
+    transport = "video_a"
     API = "https://api.liveavatar.com/v1"
 
     def __init__(
@@ -313,7 +313,7 @@ class LiveAvatarLiteProvider:
         if not data.get("session_token") or not data.get("session_id"):
             raise ProviderError("liveavatar returned no session token")
         return {
-            "kind": "liveavatar",
+            "kind": "video_a",
             "session_token": data["session_token"],
             "vendor_ref": data["session_id"],
         }
@@ -344,7 +344,7 @@ class KeyframeProvider:
     duration is the backstop."""
 
     stateful = True
-    transport = "keyframe"
+    transport = "video_b"
     API = "https://api.keyframelabs.com/v1"
     ELEVENLABS_API = "https://api.elevenlabs.io/v1"
 
@@ -397,7 +397,7 @@ class KeyframeProvider:
         except KeyError as e:
             raise ProviderError(f"keyframe launch reply is missing {e}") from e
         return {
-            "kind": "keyframe",
+            "kind": "video_b",
             "session_details": details,
             "voice_agent": voice_agent,
             "dynamic_variables": ctx.dynamic_variables,

@@ -2,10 +2,11 @@
 //
 // The API returns a `launch` describing how to show the chosen provider. The page
 // looks up a "stage" component by `launch.kind` (components/stages). Everything else
-// on the page (clock, End button, page-exit beacon, feedback, rating) is shared.
+// on the page (clock, End button, page-exit beacon, rating) is shared.
 //
 // A vendor that hands you an iframe URL is kind "iframe" and needs no code. A vendor
 // with its own JS SDK gets a new kind + one stage component (see ElevenLabsStage).
+// Kinds ship to every browser, so they are neutral words, never vendor names.
 
 export type ProviderInfo = {
   id: string;
@@ -31,7 +32,7 @@ export type IframeLaunch = {
 // ElevenLabs agent, run in the browser with the ElevenLabs SDK. Private agents get a
 // short-lived conversation token from our server; a public test agent gets only its id.
 export type ElevenLabsLaunch = {
-  kind: "elevenlabs";
+  kind: "voice_call";
   connection_type: "webrtc";
   conversation_token?: string;
   agent_id?: string;
@@ -39,10 +40,10 @@ export type ElevenLabsLaunch = {
 };
 
 // Video agents: an avatar SDK in the browser, voiced by our ElevenLabs agent.
-export type LiveAvatarLaunch = { kind: "liveavatar"; session_token: string };
+export type LiveAvatarLaunch = { kind: "video_a"; session_token: string };
 
 export type KeyframeLaunch = {
-  kind: "keyframe";
+  kind: "video_b";
   session_details: { server_url: string; participant_token: string; agent_identity: string };
   voice_agent: { type: "elevenlabs"; agent_id: string; signed_url: string };
   dynamic_variables: Record<string, string>;
@@ -53,7 +54,6 @@ export type Launch = IframeLaunch | ElevenLabsLaunch | LiveAvatarLaunch | Keyfra
 export type StartResp = {
   session_id: string;
   created: boolean;
-  provider_id: string;
   launch: Launch;
   practice_seconds: number;
   disclosure: string;

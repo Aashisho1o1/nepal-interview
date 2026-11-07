@@ -321,7 +321,7 @@ async def test_full_voice_session_lifecycle_with_feedback(make_env):
     assert s["mode"] == "voice" and s["practice_seconds"] == VOICE_SECONDS
     assert "not" in s["disclosure"].lower()  # every format says what it is not
     launch = s["launch"]
-    assert launch["kind"] == "elevenlabs"
+    assert launch["kind"] == "voice_call"
     dv = launch["dynamic_variables"]
     assert dv["session_id"] == sid and dv["university"] == "Example University"
     assert "GBP 28,006.00" in dv["funding_summary"]  # precomputed, never left to the agent

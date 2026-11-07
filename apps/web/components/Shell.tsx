@@ -7,12 +7,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, firstName, type Me } from "@/lib/api";
 
-// [label, where the step lives]. Feedback belongs to a session, so it's only shown.
+// [label, where the step lives]. Rating belongs to a session, so it's only shown.
 const STEPS: [string, string | null][] = [
   ["Your account", "/"],
   ["About you", "/prepare"],
   ["Practise", "/interview"],
-  ["Feedback", null],
+  ["Rate it", null],
 ];
 
 type Props = {
@@ -87,6 +87,11 @@ export default function Shell({ step, title, intro, width = "page", me: given, l
         {title && <h1>{title}</h1>}
         {intro && <p className="intro">{intro}</p>}
         {children}
+        {!locked && (
+          <p className="caption legal-links">
+            <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link>
+          </p>
+        )}
       </main>
     </>
   );

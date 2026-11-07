@@ -50,7 +50,7 @@ export default function ElevenLabsStage({ sessionId, launch, onPhase, onClock, o
           setMode("listening");
           try {
             const r = await post("media_ready", {
-              trigger: "elevenlabs_connect",
+              trigger: "call_connected",
               ready_ms: Math.round(performance.now() - mountedAt),
             });
             if (r.practice_ends_at) cb.current.onClock(r.practice_ends_at * 1000);
@@ -64,13 +64,12 @@ export default function ElevenLabsStage({ sessionId, launch, onPhase, onClock, o
           setMode(m);
           cb.current.onPhase(m);
         },
-        onError: (message: string) => {
-          cb.current.onNotice(`Interviewer error: ${message}`);
+        onError: () => {
+          cb.current.onNotice("The interviewer had a problem. If the call stops, please try again.");
         },
-        onDisconnect: (d: { reason: "error" | "agent" | "user"; message?: string }) => {
+        onDisconnect: (d: { reason: "error" | "agent" | "user" }) => {
           if (closing) return;
           if (d.reason === "agent") return finish("agent_ended");
-          if (d.reason === "error" && d.message) cb.current.onNotice(d.message);
           finish(connected ? "disconnected" : "connect_failed");
         },
       };

@@ -454,7 +454,6 @@ def create_app(
         out = {
             "session_id": str(sess["id"]),
             "created": res.created,
-            "provider_id": prov.spec.id,
             "launch": launch,
             "mode": sess["mode"],
             "practice_seconds": sess["practice_seconds"],
@@ -529,7 +528,6 @@ def create_app(
             "charged_premium_seconds",
             "charged_basic_seconds",
             "waived_seconds",
-            "provider_id",
         )
         return {k: (str(sess[k]) if k == "id" else sess[k]) for k in keys}
 

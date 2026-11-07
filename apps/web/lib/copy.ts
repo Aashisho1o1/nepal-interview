@@ -2,8 +2,11 @@
 export const DISCLAIMER =
   "This is practice only. Your interviewer is a fictional AI, not a university officer or UKVI, and not connected to any university or government. Practising here cannot predict or affect any CAS or visa decision.";
 
-export const DATA_NOTE =
-  "Your voice and the details you give are sent to the AI services that run the interviewer. Our small team reads sessions and ratings to improve the practice.";
+// Follows each interviewer's own note about what it receives.
+export const DATA_NOTE = "Our small team reads sessions and ratings to improve the practice.";
+
+// Shown on the privacy and terms pages. Set before going public.
+export const CONTACT_EMAIL = "aashishsunar.01@gmail.com";
 
 // Google Form for the paid-version waiting list. Empty = the button shows "opening soon".
 export const WAITLIST_URL = "https://forms.gle/U4SiZez78g8QS4Fu5";

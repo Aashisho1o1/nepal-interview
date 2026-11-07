@@ -2,7 +2,7 @@
 
 // Step 3: pick an interviewer, start, talk, end. The page knows nothing about
 // vendors: the API returns a launch and the matching stage component renders it.
-// Clock, End button, page-exit cleanup and the move to feedback are shared.
+// Clock, End button, page-exit cleanup and the move to the session page are shared.
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -183,16 +183,13 @@ export default function Interview() {
             onChange={setProviderId}
           />
           {me && providers.length === 0 && <p className="error" style={{ marginTop: 12 }}>No interviewer is available right now.</p>}
-          {chosen && chosen.capabilities.transcripts === false && (
-            <p className="notice" style={{ marginTop: 12 }}>
-              This interviewer doesn&apos;t give written feedback yet. Your session still counts, and you can rate it afterwards.
+          <CodeBox onRedeemed={() => api<Me>("/me").then(setMe).catch(() => undefined)} />
+          {chosen?.capabilities.student_facts && (
+            <p className="small" style={{ margin: "16px 0 0" }}>
+              <Link href="/prepare">Add your details</Link> for a more realistic interview.
             </p>
           )}
-          <CodeBox onRedeemed={() => api<Me>("/me").then(setMe).catch(() => undefined)} />
-          <p className="small" style={{ margin: "16px 0 0" }}>
-            <Link href="/prepare">Add your details</Link> for a more realistic interview.
-          </p>
-          <p className="caption" style={{ margin: "16px 0 6px" }}>{DATA_NOTE}</p>
+          <p className="caption" style={{ margin: "16px 0 6px" }}>{chosen?.data_note} {DATA_NOTE}</p>
           <p className="caption" style={{ margin: "0 0 20px" }}>{DISCLAIMER}</p>
           <button type="button" className="btn btn-primary btn-block" onClick={start} disabled={phase === "starting" || !me || !providerId || (chosen && (tierOff(chosen) || used(chosen)))}>
             {phase === "starting" ? "Starting…" : "Start practice"}

@@ -1,7 +1,7 @@
 "use client";
 
-// Home. Signed out: what this is, how it works, example feedback, then one form at
-// the bottom to create an account or sign in.
+// Home. Signed out: what this is, how it works, then one form at the bottom to create
+// an account or sign in.
 // Video or voice is chosen later, on the practice page. Signed in: where to pick up.
 
 import Link from "next/link";
@@ -18,7 +18,6 @@ const STEPS: [string, string][] = [
   ["Create your account", "Free: a voice session every day, and a video session on each of your first three days."],
   ["Tell us about you", "Five quick details, or skip and practise straight away."],
   ["Have a conversation", "Video or voice. Three questions, out loud, in two minutes."],
-  ["See your feedback", "What went well and what to practise, in your own words."],
 ];
 
 export default function HomePage() {
@@ -102,7 +101,7 @@ export default function HomePage() {
             <p className="small" style={{ marginTop: 16 }}>
               Last session: <span className="nums">{new Date(home.last.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span> ·{" "}
               {home.last.mode === "avatar" ? "Video" : "Voice"} · {home.last.end_reason === "deadline" ? "Time ran out" : STATUS[home.last.status] ?? END_REASON[home.last.end_reason ?? ""] ?? "Ended"}{" "}
-              <Link href={`/sessions/${home.last.id}`}>See feedback →</Link>
+              <Link href={`/sessions/${home.last.id}`}>See session →</Link>
             </p>
           )}
         </section>
@@ -113,8 +112,7 @@ export default function HomePage() {
             <h1 className="display">Practise your student interview before the real one.</h1>
             <p className="lead">
               <em>
-                Practise with an <strong>AI interviewer</strong> on a <strong>video call</strong> or an <strong>audio call</strong>,
-                and get feedback after every session.
+                Practise with an <strong>AI interviewer</strong> on a <strong>video call</strong> or an <strong>audio call</strong>.
               </em>
             </p>
             <p className="small">
@@ -130,7 +128,6 @@ export default function HomePage() {
                 <span className="who">Visa applicant (you)</span>
                 <span className="bubble a">I chose MSc Data Science because its machine learning modules build on my…</span>
               </div>
-              <p className="ok">✓ Clear and specific</p>
             </div>
           </section>
 
@@ -150,18 +147,6 @@ export default function HomePage() {
             </div>
           ))}
         </div>
-      </section>
-
-      <section className="section">
-        <p className="eyebrow">What you get</p>
-        <div className="card finding">
-          <span className="severity severity--good">Strength</span>
-          <div className="caption">Funding explanation</div>
-          <div className="quote">“My father will pay the fees from his savings of fifteen thousand pounds, and the deposit is already paid.”</div>
-          <p>You named the source and the amount, and both match your confirmed facts.</p>
-          <p><strong>Next:</strong> Say when the money will be available, too.</p>
-        </div>
-        <p className="caption">Example feedback from a practice session.</p>
       </section>
 
       {!home && (
@@ -195,6 +180,12 @@ export default function HomePage() {
                 {busy ? (signup ? "Creating your account…" : "Signing in…") : signup ? "Create account" : "Sign in"}
               </button>
               {error && <p className="error" role="alert" style={{ marginTop: 10 }}>{error}</p>}
+              {signup && (
+                <p className="caption" style={{ marginTop: 12 }}>
+                  By creating an account, you confirm you&apos;re 18 or over and agree to our{" "}
+                  <Link href="/terms" target="_blank">Terms</Link> and <Link href="/privacy" target="_blank">Privacy Policy</Link>.
+                </p>
+              )}
               <p className="caption" style={{ marginTop: 12 }}>
                 {signup ? "Free to start. No card needed. Already have an account?" : "New here?"}{" "}
                 <button type="button" className="btn btn-ghost" onClick={switchMode}>

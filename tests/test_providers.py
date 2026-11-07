@@ -69,7 +69,7 @@ async def test_embed_session_reserves_quota_and_returns_iframe_launch(make_env):
     r = await start(c, VIDEO)
     assert r.status_code == 200, r.text
     s = r.json()
-    assert s["provider_id"] == VIDEO and s["mode"] == "avatar"
+    assert s["mode"] == "avatar"
     launch = s["launch"]
     assert launch["kind"] == "iframe" and launch["url"] == EMBED
     assert launch["origin"] == "https://embed.liveavatar.com"
@@ -149,7 +149,6 @@ async def test_rating_after_session_for_any_provider(make_env):
     ).status_code == 200
     fb = (await a.get(f"/api/sessions/{sid}/feedback")).json()
     assert fb["rating"]["realism"] == 2 and fb["provider"]["transcripts"] is False
-    assert fb["session"]["provider_id"] == VIDEO
 
 
 async def test_end_reason_is_recorded_for_comparison(make_env):

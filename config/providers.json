@@ -2,7 +2,7 @@
   "_comment": "Interview providers offered to students. No secrets here: URLs and keys come from the env vars named below. A provider is offered only when enabled is true AND its required env vars are set. Order = order shown to students. Labels and data_note reach the browser: never name a vendor in them. See docs/ELEVENLABS_LIVEAVATAR_FOCUS.md.",
   "providers": [
     {
-      "id": "liveavatar_embed",
+      "id": "video_embed",
       "label": "Video interviewer",
       "vendor": "HeyGen LiveAvatar (embed)",
       "integration": "iframe_embed",
@@ -64,7 +64,7 @@
       }
     },
     {
-      "id": "elevenlabs_voice",
+      "id": "voice",
       "label": "Voice only",
       "vendor": "ElevenLabs Agents",
       "integration": "elevenlabs_agent",

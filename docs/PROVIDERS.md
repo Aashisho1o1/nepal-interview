@@ -82,10 +82,10 @@ run short.
 ## Switch or add a provider
 
 - **Turn providers on/off or reorder:** edit `config/providers.json` (`enabled`, order),
-  or set `ENABLED_PROVIDERS=elevenlabs_voice` for a quick test. `VIDEO_TIER_ENABLED` and
+  or set `ENABLED_PROVIDERS=voice` for a quick test. `VIDEO_TIER_ENABLED` and
   `VOICE_TIER_ENABLED` pause a whole tier without a config change.
 - **Another vendor with an embed URL:** copy the `liveavatar_embed` entry with a new
-  `id`, `url_env` and `allowed_hosts`. No code changes. Add its origin to `EMBED_ORIGINS`
+  `id`, `url_env` and `allowed_hosts`. No code changes. Add its origin to `IFRAME_ORIGINS`
   in the web app, otherwise the browser blocks its microphone.
 - **A vendor that needs per-session API calls:** add a class in `providers.py` with
   `launch()` and `close()`; mark it `stateful = True` and the API guarantees one vendor
@@ -106,7 +106,7 @@ be reconciled from their dashboards.
 
 ## Things that bite if forgotten
 
-- `EMBED_ORIGINS` (web) must include every iframe vendor's origin.
+- `IFRAME_ORIGINS` (web) must include every iframe vendor's origin.
 - Students must allow the microphone for the vendor's iframe; the browser asks
   separately for the embedded site.
 - The ElevenLabs prompt only uses a dynamic variable if it references `{{that_variable}}`.

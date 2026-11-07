@@ -22,7 +22,7 @@ PUBLIC_ENV = {"ELEVENLABS_AGENT_ID": AGENT, "ELEVENLABS_ALLOW_PUBLIC_AGENT": "tr
 PRIVATE_ENV = {"ELEVENLABS_AGENT_ID": AGENT, "ELEVENLABS_API_KEY": "xi-secret-key"}
 
 
-def body(provider_id: str = "elevenlabs_voice") -> dict:
+def body(provider_id: str = "voice") -> dict:
     return {"track": "uk_pre_cas", "provider_id": provider_id}
 
 
@@ -50,29 +50,29 @@ def token_http(calls: list, status: int = 200, payload: dict | None = None):
 def test_students_are_offered_only_elevenlabs_and_liveavatar():
     raw = json.loads(DEFAULT_PROVIDERS_FILE.read_text())
     enabled = {p["id"] for p in raw["providers"] if p.get("enabled")}
-    assert enabled == {"liveavatar_embed", "video_a", "video_b", "elevenlabs_voice"}
+    assert enabled == {"video_embed", "video_a", "video_b", "voice"}
     s = Settings(database_url="unused")
     env = {**PUBLIC_ENV, "LIVEAVATAR_EMBED_URL": "https://embed.liveavatar.com/v1/x"}
     reg = load_registry(s, env=env)
-    assert reg.order == ["liveavatar_embed", "elevenlabs_voice"]
-    assert reg.get("elevenlabs_voice").spec.label == "Voice only"
+    assert reg.order == ["video_embed", "voice"]
+    assert reg.get("voice").spec.label == "Voice only"
 
 
 def test_voice_needs_a_key_unless_public_agent_is_explicitly_allowed():
     s = Settings(database_url="unused")
-    assert "ELEVENLABS_AGENT_ID" in load_registry(s, env={}).disabled["elevenlabs_voice"]
+    assert "ELEVENLABS_AGENT_ID" in load_registry(s, env={}).disabled["voice"]
     no_key = load_registry(s, env={"ELEVENLABS_AGENT_ID": AGENT})
-    assert "ELEVENLABS_API_KEY" in no_key.disabled["elevenlabs_voice"]
-    assert load_registry(s, env=PUBLIC_ENV).order == ["elevenlabs_voice"]
-    assert load_registry(s, env=PRIVATE_ENV).order == ["elevenlabs_voice"]
+    assert "ELEVENLABS_API_KEY" in no_key.disabled["voice"]
+    assert load_registry(s, env=PUBLIC_ENV).order == ["voice"]
+    assert load_registry(s, env=PRIVATE_ENV).order == ["voice"]
 
 
 async def test_public_agent_launch_gets_agent_id_and_never_calls_the_api():
     calls: list = []
     reg = load_registry(Settings(database_url="unused"), env=PUBLIC_ENV, http=token_http(calls))
-    launch = await reg.get("elevenlabs_voice").launch(ctx())
+    launch = await reg.get("voice").launch(ctx())
     assert launch == {
-        "kind": "elevenlabs",
+        "kind": "voice_call",
         "connection_type": "webrtc",
         "agent_id": AGENT,
         "dynamic_variables": {"session_id": "s1", "university": "Example"},
@@ -84,7 +84,7 @@ async def test_private_agent_gets_a_server_minted_token_and_no_key():
     calls: list = []
     env = {**PRIVATE_ENV, "ELEVENLABS_BRANCH_ID": "agtbrch_1"}
     reg = load_registry(Settings(database_url="unused"), env=env, http=token_http(calls))
-    launch = await reg.get("elevenlabs_voice").launch(ctx())
+    launch = await reg.get("voice").launch(ctx())
     assert launch["conversation_token"] == "tok-1" and "agent_id" not in launch
     assert "xi-secret-key" not in json.dumps(launch)
     (req,) = calls
@@ -99,7 +99,7 @@ async def test_token_failure_is_a_provider_error(status, payload):
         Settings(database_url="unused"), env=PRIVATE_ENV, http=token_http([], status, payload)
     )
     with pytest.raises(ProviderError):
-        await reg.get("elevenlabs_voice").launch(ctx())
+        await reg.get("voice").launch(ctx())
 
 
 async def test_token_failure_settles_the_session_and_the_student_can_retry(make_env):
@@ -121,7 +121,7 @@ async def test_voice_session_reserves_five_minutes_and_passes_session_id(make_en
     assert r.status_code == 200, r.text
     s = r.json()
     assert s["mode"] == "voice" and s["practice_seconds"] == 120
-    assert s["launch"]["kind"] == "elevenlabs"
+    assert s["launch"]["kind"] == "voice_call"
     assert s["launch"]["dynamic_variables"]["session_id"] == s["session_id"]
     assert (await balance(c, "basic_seconds"))["reserved"] == 120
     # Browser-driven lifecycle: clock starts on connect; the agent hanging up ends it.

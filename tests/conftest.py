@@ -29,8 +29,8 @@ HERO_ENV = {
     "ELEVENLABS_AGENT_ID": AGENT,
     "ELEVENLABS_ALLOW_PUBLIC_AGENT": "true",
 }
-VIDEO = "liveavatar_embed"
-VOICE = "elevenlabs_voice"
+VIDEO = "video_embed"
+VOICE = "voice"
 TRACK = "uk_pre_cas"
 VIDEO_SECONDS = 120  # the video format: two minutes
 VOICE_SECONDS = 120  # the voice format: two minutes

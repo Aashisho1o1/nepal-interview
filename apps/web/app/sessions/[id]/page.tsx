@@ -1,7 +1,7 @@
 "use client";
 
-// Step 4: feedback built from the transcript (when the interviewer gives us one),
-// the transcript itself, and the rating form.
+// Step 4: the rating form. Feedback and the transcript show only if a session has them,
+// which none does until transcripts are connected.
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -85,8 +85,8 @@ export default function SessionPage() {
     };
   }, [id, router]);
 
-  if (error) return <Shell step={4} title="Your feedback"><p className="error">{error}</p></Shell>;
-  if (!data) return <Shell step={4} title="Your feedback"><p className="small">Loading…</p></Shell>;
+  if (error) return <Shell step={4} title="Your session"><p className="error">{error}</p></Shell>;
+  if (!data) return <Shell step={4} title="Your session"><p className="small">Loading…</p></Shell>;
 
   const { session, turns, feedback, provider } = data;
   const report = feedback?.report ?? null;
@@ -104,7 +104,7 @@ export default function SessionPage() {
   const status = session.end_reason === "deadline" ? "Time ran out" : STATUS[session.status] ?? "Finished";
 
   return (
-    <Shell step={4} title="Your feedback" intro={<span className="nums">{when} · {tier} · {fmtSeconds(used)} used · {status}</span>}>
+    <Shell step={4} title="Your session" intro={<span className="nums">{when} · {tier} · {fmtSeconds(used)} used · {status}</span>}>
       {session.status === "failed" ? (
         <div className="card">
           <p>This session didn&apos;t start ({(END_REASON[session.end_reason ?? ""] ?? "could not connect").toLowerCase()}), so no time was used.</p>
@@ -126,12 +126,9 @@ export default function SessionPage() {
           ) : feedback?.status === "failed" ? (
             <p className="small">{feedback.error}</p>
           ) : (
-            <p className="small">
-              This session has no transcript, so we couldn&apos;t build written feedback for it. Your practice still
-              counts, and telling us how it felt below helps us improve.
-            </p>
+            <p className="small">Thanks for practising. Telling us how it felt below helps us improve.</p>
           )}
-          {session.end_reason === "deadline" && <p className="caption">Time ran out. The feedback covers the part you completed.</p>}
+          {report && session.end_reason === "deadline" && <p className="caption">Time ran out. The feedback covers the part you completed.</p>}
           <Link href="/interview" className="btn btn-primary btn-block">Practise again</Link>
         </div>
       )}

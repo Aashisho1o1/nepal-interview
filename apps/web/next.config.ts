@@ -10,15 +10,18 @@ const ON_VERCEL = Boolean(process.env.VERCEL);
 // for it). Without listing them here, Permissions-Policy blocks the mic inside the
 // iframe even when the iframe has allow="microphone": the embed would load but never
 // hear the student. Keep in sync with allowed_hosts in config/providers.json.
-const EMBED_ORIGINS = (process.env.EMBED_ORIGINS || "https://embed.liveavatar.com")
+// Empty by default, because this header goes to every visitor and would name the vendor.
+// Set it only when an iframe interviewer is offered.
+const EMBED_ORIGINS = (process.env.IFRAME_ORIGINS || "")
   .split(/[\s,]+/)
   .filter((o) => /^https?:\/\/[a-z0-9.-]+(:\d+)?$/i.test(o));
 const quoted = EMBED_ORIGINS.map((o) => `"${o}"`).join(" ");
+const allowed = ["self", ...EMBED_ORIGINS.map((o) => `"${o}"`)].join(" ");
 
 const permissionsPolicy = [
-  `microphone=(self ${quoted})`,
-  `autoplay=(self ${quoted})`,
-  `fullscreen=(self ${quoted})`,
+  `microphone=(${allowed})`,
+  `autoplay=(${allowed})`,
+  `fullscreen=(${allowed})`,
   `camera=(${quoted})`, // our own pages never use the camera
   "geolocation=()",
 ].join(", ");
