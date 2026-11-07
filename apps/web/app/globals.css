@@ -213,6 +213,11 @@ td:last-child { text-align: right; padding-left: 12px; font-variant-numeric: tab
 .team-row p { margin: 0 0 8px; }
 .hero .small { margin: -12px 0 24px; }
 
+/* Recorded demo: one box for both clips, so switching doesn't move the page */
+.clip { margin-top: 28px; }
+.clip video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: var(--surface-2); border-radius: var(--r-lg); margin: 12px 0 8px; }
+.clip p { margin: 0 0 6px; }
+
 /* Privacy and terms */
 .legal h2 { margin-top: 28px; }
 .legal-links { margin: 32px 0 0; text-align: center; }

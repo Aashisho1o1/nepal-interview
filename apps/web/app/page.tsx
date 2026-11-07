@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import DemoClip from "@/components/DemoClip";
 import Shell from "@/components/Shell";
 import Waitlist from "@/components/Waitlist";
 import { api, ApiError, firstName, Me, SessionSummary } from "@/lib/api";
@@ -118,6 +119,7 @@ export default function HomePage() {
               Early access covers the UK pre-CAS interview. The US, Europe and Australia are coming soon.
             </p>
             <button type="button" className="btn btn-primary" onClick={startFree}>Start practising free</button>
+            <DemoClip onTry={startFree} />
           </section>
 
         </>

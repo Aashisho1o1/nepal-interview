@@ -33,6 +33,8 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      // Demo files are versioned by name (-v1, -v2), so browsers can keep them.
+      { source: "/demo/:file", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
       {
         source: "/:path*",
         headers: [
