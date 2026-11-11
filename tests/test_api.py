@@ -785,3 +785,24 @@ def test_rate_limiter_keeps_live_blocks_when_full():
     assert rl.blocked("victim")  # flooding the table lifts nobody's block
     assert len(rl.hits) <= rl.MAX_KEYS + 1  # bounded: extra keys share one counter
     assert not RateLimiter(max_hits=1, window_s=60).blocked("never-seen")
+
+
+def test_email_check_runs_in_linear_time_and_rejects_empty_labels():
+    import time
+
+    from interview_api.app import EMAIL_RE
+
+    crafted = "!@!." + "!." * 10_000 + "@"  # worst case for the old pattern: about 1.3 s
+    t = time.perf_counter()
+    assert not EMAIL_RE.match(crafted)
+    assert time.perf_counter() - t < 0.05
+    for ok in ("a@b.co", "sita.rai@mail.example.com.np", "a+tag@x.io"):
+        assert EMAIL_RE.match(ok)
+    for bad in ("a@b", "a@b.", "a@.b.c", "a@b..c", "a b@c.d", "a@@b.c"):
+        assert not EMAIL_RE.match(bad)
+
+
+async def test_signup_rejects_a_domain_with_an_empty_label(make_env):
+    env = await make_env()
+    async with env.client() as c:
+        assert (await signup(c, email="a@b..c")).status_code == 422
