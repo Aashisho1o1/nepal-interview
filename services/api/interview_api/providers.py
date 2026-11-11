@@ -136,10 +136,24 @@ def _blank_variables(ctx: LaunchContext) -> dict[str, str]:
     )
 
 
+class _Provider:
+    spec: ProviderSpec
+    transport: str
+
+    def session_providers(self) -> dict[str, Any]:
+        """Stored on the session row for reporting."""
+        return {
+            "provider_id": self.spec.id,
+            "integration": self.spec.integration,
+            "transport": self.transport,
+            "vendor": self.spec.vendor,
+        }
+
+
 # --------------------------------------------------------------------------- iframe
 
 
-class IframeEmbedProvider:
+class IframeEmbedProvider(_Provider):
     """A vendor's ready-made embed (e.g. a LiveAvatar embed URL). Fastest to test.
 
     Limits, by design of static embeds: the persona and its knowledge are configured
@@ -156,14 +170,6 @@ class IframeEmbedProvider:
     def __init__(self, spec: ProviderSpec, url: str):
         self.spec = spec
         self.url = _checked_url(url, spec.raw.get("allowed_hosts", []))
-
-    def session_providers(self) -> dict[str, Any]:
-        return {
-            "provider_id": self.spec.id,
-            "integration": self.spec.integration,
-            "transport": self.transport,
-            "vendor": self.spec.vendor,
-        }
 
     async def launch(self, ctx: LaunchContext) -> dict[str, Any]:
         r = self.spec.raw
@@ -185,7 +191,7 @@ class IframeEmbedProvider:
 # --------------------------------------------------------------------------- ElevenLabs
 
 
-class ElevenLabsAgentProvider:
+class ElevenLabsAgentProvider(_Provider):
     """An ElevenLabs agent (prompt, voice and turn-taking configured in their dashboard)
     that the browser talks to directly with the ElevenLabs SDK.
 
@@ -216,9 +222,7 @@ class ElevenLabsAgentProvider:
 
     def session_providers(self) -> dict[str, Any]:
         return {
-            "provider_id": self.spec.id,
-            "integration": self.spec.integration,
-            "transport": self.transport,
+            **super().session_providers(),
             "vendor": "elevenlabs",
             "agent_access": "token" if self.api_key else "public",
         }
@@ -254,7 +258,7 @@ class ElevenLabsAgentProvider:
 # --------------------------------------------------------------------------- video agents
 
 
-class LiveAvatarLiteProvider:
+class LiveAvatarLiteProvider(_Provider):
     """LiveAvatar in LITE ("avatar only") mode: it draws the face, and our ElevenLabs agent
     listens, thinks and talks through LiveAvatar's connector. We mint a session token per
     session; the browser SDK starts the session with it. The server can stop it, and
@@ -279,14 +283,6 @@ class LiveAvatarLiteProvider:
         self.spec, self.api_key, self.avatar_id = spec, api_key, avatar_id
         self.secret_id, self.agent_id, self.sandbox = secret_id, agent_id, sandbox
         self.http = http or httpx.AsyncClient(timeout=15)
-
-    def session_providers(self) -> dict[str, Any]:
-        return {
-            "provider_id": self.spec.id,
-            "integration": self.spec.integration,
-            "transport": self.transport,
-            "vendor": self.spec.vendor,
-        }
 
     async def launch(self, ctx: LaunchContext) -> dict[str, Any]:
         reply = await _vendor_json(
@@ -336,7 +332,7 @@ class LiveAvatarLiteProvider:
         return r.status_code < 500 and r.status_code not in (401, 403, 408, 429)
 
 
-class KeyframeProvider:
+class KeyframeProvider(_Provider):
     """A Keyframe avatar driven by our ElevenLabs agent. The browser talks to ElevenLabs
     over a signed URL, sending the student's voice and details there only, and passes the
     agent's audio to Keyframe to animate. Both keys stay here. Keyframe documents no server
@@ -361,14 +357,6 @@ class KeyframeProvider:
         self.spec, self.api_key, self.persona = spec, api_key, persona
         self.agent_id, self.elevenlabs_key = agent_id, elevenlabs_key
         self.http = http or httpx.AsyncClient(timeout=15)
-
-    def session_providers(self) -> dict[str, Any]:
-        return {
-            "provider_id": self.spec.id,
-            "integration": self.spec.integration,
-            "transport": self.transport,
-            "vendor": self.spec.vendor,
-        }
 
     async def launch(self, ctx: LaunchContext) -> dict[str, Any]:
         signed = await _vendor_json(

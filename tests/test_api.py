@@ -29,6 +29,7 @@ from conftest import (
     start,
 )
 from interview_api import plans
+from interview_api.accounts import set_role
 from interview_api.config import get_settings
 from interview_api.db import RECONCILE_LOCK
 from interview_api.reconcile import reconcile_once
@@ -426,6 +427,27 @@ async def test_kill_switch_disabled_track_and_rate_limit(make_env):
     assert (await start(c, VOICE)).status_code == 429
 
 
+async def test_uncharged_sessions_are_capped_per_day(make_env):
+    """A call the server cannot stop keeps running at the vendor after a refunded
+    ending, so refunded endings are limited."""
+    env = await make_env(max_uncharged_per_day=2)
+    c = await ready_student(env)
+    for _ in range(2):
+        sid = (await start(c, VOICE)).json()["session_id"]
+        await end(c, sid)  # never connected: refunded in full
+    r = await start(c, VOICE)
+    assert r.status_code == 429 and r.json()["error"] == "rate_limited"
+
+
+async def test_health_checks_and_response_hygiene(make_env):
+    env = await make_env()
+    async with env.client() as c:
+        assert (await c.get("/livez")).json() == {"ok": True}
+        assert (await c.get("/healthz")).status_code == 200  # reaches the database
+        assert (await c.get("/api/me")).headers["cache-control"] == "no-store"
+        assert (await c.get("/openapi.json")).status_code == 404  # off unless API_DOCS
+
+
 async def test_unknown_track_or_format_is_refused(make_env):
     env = await make_env()
     c = await ready_student(env)
@@ -515,6 +537,13 @@ async def test_signup_is_rate_limited_per_network_and_can_be_closed(make_env):
             assert (await signup(c, email=f"u{i}@example.test")).status_code == 200
         r = await signup(c, email="u5@example.test")
         assert r.status_code == 429
+    # Failed attempts count too: each one costs a password hash.
+    env = await make_env()
+    async with env.client() as c:
+        assert (await signup(c)).status_code == 200
+        for _ in range(19):
+            assert (await signup(c)).status_code == 409
+        assert (await signup(c)).status_code == 429
     closed = await make_env(signup_enabled=False)
     async with closed.client() as c:
         assert (await signup(c)).status_code == 403
@@ -709,9 +738,14 @@ async def test_cumulative_usage_only_increases(make_env):
 
 
 async def test_team_sees_every_session_with_rating_and_transcript(make_env):
-    env = await make_env(team_emails=frozenset({"founder@synthetic.test"}))
+    env = await make_env()
     student = await ready_student(env, "a@synthetic.test", "Student A")
     founder = await ready_student(env, "founder@synthetic.test", "Founder")
+    # Team access is a role an operator grants, never something an email address earns.
+    assert (await founder.get("/api/team/sessions")).status_code == 404
+    async with env.pool.connection() as conn:
+        assert await set_role(conn, "Founder@synthetic.test", "admin")
+        assert not await set_role(conn, "nobody@synthetic.test", "admin")
 
     sid = (await start(student, VOICE)).json()["session_id"]
     await media_ready(student, sid)

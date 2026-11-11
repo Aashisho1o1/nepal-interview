@@ -56,3 +56,42 @@ async def provision_student(
                     (sid, bucket, package, secs, expires),
                 )
     return str(sid)
+
+
+# ---------------------------------------------------------------- admin command
+
+
+async def set_role(conn, email: str, role: str) -> bool:
+    """Returns False when no account has that email."""
+    cur = await conn.execute(
+        "UPDATE users SET role=%s WHERE email=%s RETURNING id", (role, email.strip().lower())
+    )
+    return await cur.fetchone() is not None
+
+
+async def _cli(email: str, role: str) -> None:
+    from .config import get_settings
+    from .db import make_pool
+
+    pool = make_pool(get_settings().database_url, max_size=1)
+    await pool.open()
+    try:
+        async with pool.connection() as conn:
+            found = await set_role(conn, email, role)
+    finally:
+        await pool.close()
+    print(f"{email} is now {role}." if found else "No account with that email. Sign up first.")
+
+
+if __name__ == "__main__":
+    import argparse
+    import asyncio
+
+    ap = argparse.ArgumentParser(
+        prog="python -m interview_api.accounts",
+        description="Give or remove team access (/team: every session and transcript).",
+    )
+    ap.add_argument("action", choices=["grant-team", "revoke-team"])
+    ap.add_argument("email", help="the account's sign-in email")
+    a = ap.parse_args()
+    asyncio.run(_cli(a.email, "admin" if a.action == "grant-team" else "student"))

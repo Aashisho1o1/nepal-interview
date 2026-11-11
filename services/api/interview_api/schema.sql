@@ -2,8 +2,6 @@
 -- migrations block at the end upgrades databases created by earlier versions.
 -- Money and usage: integers in minor units / seconds; provider quantities NUMERIC.
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
 CREATE TABLE IF NOT EXISTS users (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email         TEXT NOT NULL UNIQUE,
@@ -226,3 +224,14 @@ ALTER TABLE interview_sessions DROP COLUMN IF EXISTS room_closed_at;
 -- Free daily grants and promo grants are keyed by package_version: at most one each.
 CREATE UNIQUE INDEX IF NOT EXISTS entitlements_once
   ON entitlements (student_id, bucket, package_version);
+
+-- Lookups that otherwise scan the whole table: active reservations per entitlement
+-- (every balance and every start), a session's events, expired sign-ins, and ended
+-- sessions the reconciler still has to close at the vendor.
+CREATE INDEX IF NOT EXISTS reservations_active
+  ON usage_reservations (entitlement_id) WHERE state = 'active';
+CREATE INDEX IF NOT EXISTS session_events_session ON session_events (session_id);
+CREATE INDEX IF NOT EXISTS auth_sessions_expiry ON auth_sessions (expires_at);
+CREATE INDEX IF NOT EXISTS sessions_unclosed
+  ON interview_sessions (ended_at)
+  WHERE vendor_closed_at IS NULL AND status IN ('completed','failed');

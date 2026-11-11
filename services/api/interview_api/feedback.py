@@ -65,8 +65,10 @@ async def grade_session(pool, s: Settings, session_id) -> dict:
         else 0
     )
     ctx = make_context(str(session_id), sess["track"], snapshot, turns, duration_ms)
-    grader = make_grader(s)
+    grader_name = s.grader
     try:
+        grader = make_grader(s)
+        grader_name = grader.name
         card, _raw, attempts = await asyncio.to_thread(
             grade_with_repair, grader, ctx, snapshot, funding
         )
@@ -84,7 +86,7 @@ async def grade_session(pool, s: Settings, session_id) -> dict:
                WHERE session_id=%s""",
             (
                 status,
-                grader.name,
+                grader_name,
                 payload and payload["schema_version"],
                 payload and payload["rubric_version"],
                 attempts,

@@ -67,14 +67,27 @@ async def reconcile_once(pool, s: Settings, registry, *, feedback_grace_s: int =
         )
         stale = await cur.fetchall()
 
-    for sess in startup:
+    async def each(counter: str, items: list, step) -> None:
+        """Run `step` per item. A failure is logged and the rest still run, so one bad
+        session cannot block every later one, minute after minute."""
+        for item in items:
+            try:
+                if await step(item) is not False:
+                    report[counter] += 1
+            except Exception:
+                sid = item["id"] if isinstance(item, dict) else item
+                log.exception("reconcile %s failed for session %s", counter, sid)
+
+    async def settle_startup(sess) -> None:
         await settle_session(pool, s, sess["id"], "reconciled_startup_timeout")
         await close_vendor(pool, sess, registry)
-        report["startup_timeouts"] += 1
-    for sess in stale:
+
+    async def settle_stale(sess) -> None:
         await settle_session(pool, s, sess["id"], "reconciled_stale", use_heartbeat_as_end=True)
         await close_vendor(pool, sess, registry)
-        report["stale_active"] += 1
+
+    await each("startup_timeouts", startup, settle_startup)
+    await each("stale_active", stale, settle_stale)
 
     async with pool.connection() as conn:
         cur = await conn.execute(
@@ -85,19 +98,23 @@ async def reconcile_once(pool, s: Settings, registry, *, feedback_grace_s: int =
         cur = await conn.execute(
             """SELECT s.id FROM interview_sessions s LEFT JOIN feedback_reports f
                  ON f.session_id = s.id
-               WHERE s.status='completed' AND f.session_id IS NULL
+               WHERE s.status='completed'
+               -- never graded, or a grading run that died part-way
+               AND (f.session_id IS NULL
+                    OR (f.status='pending' AND f.updated_at < now() - interval '10 minutes'))
                AND s.ended_at < now() - make_interval(secs => %s)
                AND EXISTS (SELECT 1 FROM interview_turns t WHERE t.session_id = s.id)""",
             (feedback_grace_s,),
         )
         ungraded = [r["id"] for r in await cur.fetchall()]
 
-    for sess in unclosed:
-        if await close_vendor(pool, sess, registry):
-            report["closed"] += 1
-    for sid in ungraded:
-        await grade_session(pool, s, sid)
-        report["graded"] += 1
+    await each("closed", unclosed, lambda sess: close_vendor(pool, sess, registry))
+    await each("graded", ungraded, lambda sid: grade_session(pool, s, sid))
+    # Sign-in rows nobody can use any more.
+    async with pool.connection() as conn:
+        await conn.execute(
+            "DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days'"
+        )
     return report
 
 

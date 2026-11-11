@@ -10,6 +10,7 @@ import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
+from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -27,6 +28,7 @@ from . import details, plans
 from .accounts import provision_student
 from .auth import (
     COOKIE,
+    DUMMY_HASH,
     RateLimiter,
     check_origin,
     client_ip,
@@ -46,6 +48,8 @@ log = logging.getLogger("interview_api")
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 SIGNUP_PACKAGE = "signup-trial-v1"
+# Browser-reported events kept per session; a normal call sends about twenty.
+MAX_EVENTS_PER_SESSION = 300
 
 
 class Strict(BaseModel):
@@ -65,17 +69,23 @@ def create_app(
     async def lifespan(app: FastAPI):
         app.state.pool = pool or make_pool(s.database_url)
         await app.state.pool.open()
-        await apply_schema(app.state.pool)
+        if s.apply_schema_on_start:
+            await apply_schema(app.state.pool)
         app.state.providers = load_registry(s, env=provider_env, http=provider_http)
         yield
         if pool is None:
             await app.state.pool.close()
 
-    app = FastAPI(title="Nepal interview session API", lifespan=lifespan)
+    docs = {} if s.api_docs else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    app = FastAPI(title="Nepal interview session API", lifespan=lifespan, **docs)
     app.state.settings = s
     app.state.prices = load_price_table(s.price_table_path)
     app.state.limiter = RateLimiter(max_hits=8, window_s=600)  # failed logins per email
+    app.state.login_ip = RateLimiter(max_hits=30, window_s=600)  # failed logins per network
     app.state.signups = RateLimiter(max_hits=5, window_s=3600)  # new accounts per network
+    # Every sign-up attempt, counted before the password is hashed: hashing is the
+    # expensive step, so failed attempts must not be free.
+    app.state.signup_tries = RateLimiter(max_hits=20, window_s=3600)
     # Wrong promo codes: per student and per network, so codes can't be guessed.
     app.state.code_tries = RateLimiter(max_hits=5, window_s=3600)
 
@@ -84,6 +94,13 @@ def create_app(
         return JSONResponse(
             {"error": e.code, "message": e.message, **e.extra}, status_code=e.status
         )
+
+    @app.middleware("http")
+    async def _no_store(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):  # personal data: never cached
+            response.headers.setdefault("Cache-Control", "no-store")
+        return response
 
     def origin_guard(request: Request) -> None:
         check_origin(request, s.allowed_origins)
@@ -96,14 +113,22 @@ def create_app(
     @app.post("/api/auth/login", dependencies=[Depends(origin_guard)])
     async def login(body: LoginBody, request: Request, response: Response):
         key = body.email.strip().lower()
-        if app.state.limiter.blocked(key):
+        ip = f"ip:{client_ip(request)}"
+        if app.state.limiter.blocked(key) or app.state.login_ip.blocked(ip):
             raise HTTPException(429, "too many attempts")
         async with app.state.pool.connection() as conn:
-            cur = await conn.execute("SELECT * FROM users WHERE email=%s", (key,))
+            cur = await conn.execute("SELECT id, password_hash FROM users WHERE email=%s", (key,))
             user = await cur.fetchone()
-            if not user or not verify_password(body.password, user["password_hash"]):
-                app.state.limiter.hit(key)
-                raise HTTPException(401, "invalid email or password")
+        # Off the event loop (scrypt is slow by design), and always run, so the reply
+        # takes as long for an unknown email as for a wrong password.
+        ok = await asyncio.to_thread(
+            verify_password, body.password, user["password_hash"] if user else DUMMY_HASH
+        )
+        if not (user and ok):
+            app.state.limiter.hit(key)
+            app.state.login_ip.hit(ip)
+            raise HTTPException(401, "invalid email or password")
+        async with app.state.pool.connection() as conn, conn.transaction():
             raw, exp = await create_login(conn, user["id"], s.login_ttl_hours)
             await audit(conn, str(user["id"]), "auth.login", "user", str(user["id"]))
         _set_login_cookie(response, raw, exp)
@@ -138,9 +163,10 @@ def create_app(
         if len(body.password) < 8:
             raise HTTPException(422, "Use a password of at least 8 characters.")
         ip = client_ip(request)
-        if app.state.signups.blocked(ip):
+        if app.state.signups.blocked(ip) or app.state.signup_tries.blocked(ip):
             raise HTTPException(429, "Too many new accounts from this network. Try again later.")
-        pw_hash = hash_password(body.password)
+        app.state.signup_tries.hit(ip)
+        pw_hash = await asyncio.to_thread(hash_password, body.password)
         async with app.state.pool.connection() as conn, conn.transaction():
             cur = await conn.execute(
                 "INSERT INTO users (email, password_hash) VALUES (%s,%s) "
@@ -495,17 +521,17 @@ def create_app(
             )
         return launch
 
-    async def _close_vendor(sess) -> None:
-        await close_vendor(app.state.pool, sess, app.state.providers)
-
-    async def _own_session(conn, session_id: str, student_id):
+    async def _own_session(conn, session_id: str, student_id, *, lock: bool = False):
+        """The student's own session; `lock` holds the row for the transaction."""
         try:
-            cur = await conn.execute(
-                "SELECT * FROM interview_sessions WHERE id=%s AND student_id=%s",
-                (session_id, student_id),
-            )
-        except Exception as e:  # malformed UUID
-            raise HTTPException(404, "session not found") from e
+            sid = UUID(session_id)
+        except ValueError:
+            raise HTTPException(404, "session not found") from None
+        cur = await conn.execute(
+            "SELECT * FROM interview_sessions WHERE id=%s AND student_id=%s"
+            + (" FOR UPDATE" if lock else ""),
+            (sid, student_id),
+        )
         sess = await cur.fetchone()
         if not sess:
             # Same response whether it does not exist or belongs to someone else.
@@ -566,7 +592,7 @@ def create_app(
         async with app.state.pool.connection() as conn:
             sess = await _own_session(conn, session_id, st["student_id"])
         out = await settle_session(app.state.pool, s, sess["id"], reason)
-        await _close_vendor(sess)
+        await close_vendor(app.state.pool, sess, app.state.providers)
         return _public(out)
 
     @app.get("/api/sessions/{session_id}/feedback")
@@ -611,7 +637,7 @@ def create_app(
     # ------------------------------------------------------------------ team review
     async def team_member(st=Depends(current_student)):
         # 404, not 403: students should not learn that the page exists.
-        if st["email"].lower() not in s.team_emails:
+        if st["role"] != "admin":
             raise HTTPException(404, "not found")
         return st
 
@@ -665,9 +691,14 @@ def create_app(
     # ------------------------------------------------------------------ shared session events
     async def _apply_event(conn, sess, kind: str, payload: dict, source: str):
         """Lifecycle events reported by the student's browser (and settlement by the API)."""
+        # Capped per session, so a client cannot fill the table; the clock and
+        # heartbeat below still apply.
         await conn.execute(
-            "INSERT INTO session_events (session_id, kind, payload, source) VALUES (%s,%s,%s,%s)",
-            (sess["id"], kind, Jsonb(payload), source),
+            """INSERT INTO session_events (session_id, kind, payload, source)
+               SELECT %s::uuid, %s::text, %s::jsonb, %s::text
+               WHERE (SELECT count(*) FROM session_events
+                      WHERE session_id=%s) < %s""",
+            (sess["id"], kind, Jsonb(payload), source, sess["id"], MAX_EVENTS_PER_SESSION),
         )
         live = sess["status"] in ("created", "active")
         if kind == "media_ready" and live and sess["media_ready_at"] is None:
@@ -708,11 +739,7 @@ def create_app(
         if len(json.dumps(body.payload)) > 4000:
             raise HTTPException(413, "payload too large")
         async with app.state.pool.connection() as conn, conn.transaction():
-            await _own_session(conn, session_id, st["student_id"])
-            cur = await conn.execute(
-                "SELECT * FROM interview_sessions WHERE id=%s FOR UPDATE", (session_id,)
-            )
-            sess = await cur.fetchone()
+            sess = await _own_session(conn, session_id, st["student_id"], lock=True)
             sess = await _apply_event(conn, sess, body.kind, body.payload, "client")
         return _event_reply(sess)
 
@@ -768,8 +795,19 @@ def create_app(
             log.info("reconcile", extra=report)
         return report
 
+    @app.get("/livez")
+    async def livez():
+        return {"ok": True}
+
     @app.get("/healthz")
     async def healthz():
+        """Readiness: the process is up and the database answers."""
+        try:
+            async with app.state.pool.connection(timeout=2) as conn:
+                await conn.execute("SELECT 1")
+        except Exception:
+            log.exception("health check: database unavailable")
+            return JSONResponse({"ok": False}, status_code=503)
         return {"ok": True}
 
     return app

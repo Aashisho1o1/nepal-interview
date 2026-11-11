@@ -53,13 +53,17 @@ class Settings:
     # Kill switches, one per tier.
     video_tier_enabled: bool = field(default_factory=lambda: _bool("VIDEO_TIER_ENABLED", True))
     voice_tier_enabled: bool = field(default_factory=lambda: _bool("VOICE_TIER_ENABLED", True))
-    # Founders who can open /team (every session, rating and transcript). Comma-separated
-    # sign-in emails; empty means nobody.
-    team_emails: frozenset[str] = field(
-        default_factory=lambda: frozenset(
-            e.strip().lower() for e in os.getenv("TEAM_EMAILS", "").split(",") if e.strip()
-        )
+    # Sessions a student may end without being charged (never connected, or the browser
+    # went quiet) in 24 hours. Calls we cannot stop from the server keep running at the
+    # vendor after such an ending, so they must not be unlimited.
+    max_uncharged_per_day: int = field(default_factory=lambda: _int("MAX_UNCHARGED_PER_DAY", 5))
+    # Apply schema.sql when the API starts. Turn off once deploys run
+    # `python -m interview_api.migrate` as a release step.
+    apply_schema_on_start: bool = field(
+        default_factory=lambda: _bool("APPLY_SCHEMA_ON_START", True)
     )
+    # Serve /docs and /openapi.json. Local development only.
+    api_docs: bool = field(default_factory=lambda: _bool("API_DOCS", False))
     grader: str = field(default_factory=lambda: os.getenv("GRADER", "rules"))
     openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
     grader_model: str = field(default_factory=lambda: os.getenv("GRADER_MODEL", ""))

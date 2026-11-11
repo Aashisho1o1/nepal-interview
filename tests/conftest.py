@@ -42,6 +42,7 @@ def settings(**kw) -> Settings:
         cookie_secure=False,
         allowed_origins=(ORIGIN,),
         max_starts_per_10min=50,
+        max_uncharged_per_day=50,
         # Free daily grants are off unless a test turns them on, so balances are exact.
         free_voice_sessions_per_day=0,
         free_video_days=0,
