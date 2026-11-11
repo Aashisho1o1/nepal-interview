@@ -204,7 +204,9 @@ class ElevenLabsAgentProvider(_Provider):
     disconnects, and the agent's own max-duration setting is the backstop.
     """
 
-    stateful = False
+    # A retry of the same start (same Idempotency-Key) gets the stored token back; it
+    # never mints another, so one session cannot collect several call credentials.
+    stateful = True
     transport = "voice_call"
     API = "https://api.elevenlabs.io/v1"
 

@@ -100,7 +100,10 @@ class RulesGrader:
     name = "rules-v1"
 
     def grade(self, ctx, snapshot, funding, repair_errors=None):
-        student = [t for t in ctx.turns if t.speaker == "student" and t.text.strip()]
+        # Canceled turns (cut off, never finished) are not evidence of anything.
+        student = [
+            t for t in ctx.turns if t.speaker == "student" and t.text.strip() and not t.canceled
+        ]
         words = sum(len(t.text.split()) for t in student)
         if len(student) < 2 or words < 15:
             quality = "insufficient"
@@ -131,7 +134,7 @@ class RulesGrader:
 
         prev_speaker = None
         for t in ctx.turns:
-            if t.speaker != "student" or not t.text.strip():
+            if t.speaker != "student" or not t.text.strip() or t.canceled:
                 prev_speaker = t.speaker
                 continue
             for sent in _sentences(t.text):

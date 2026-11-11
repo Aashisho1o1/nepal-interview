@@ -128,9 +128,14 @@ async def _main(loop: bool, interval: int) -> None:
     registry = load_registry(s)
     try:
         while True:
-            report = await reconcile_once(pool, s, registry)
-            if any(report.values()):
-                log.info("reconcile", extra=report)
+            try:
+                report = await reconcile_once(pool, s, registry)
+                if any(report.values()):
+                    log.info("reconcile %s", report)
+            except Exception:
+                if not loop:
+                    raise
+                log.exception("reconcile pass failed; trying again next interval")
             if not loop:
                 break
             await asyncio.sleep(interval)

@@ -58,6 +58,7 @@ class RateLimiter:
     needed with more than one API process."""
 
     MAX_KEYS = 50_000
+    OVERFLOW = "\x00overflow"
 
     def __init__(self, max_hits: int, window_s: int):
         self.max, self.window = max_hits, window_s
@@ -67,6 +68,8 @@ class RateLimiter:
         # Reading never stores a key, and keys with no recent hits are dropped, so
         # callers cannot grow the table by probing with made-up keys.
         now = time.monotonic()
+        if key not in self.hits and len(self.hits) >= self.MAX_KEYS:
+            key = self.OVERFLOW
         live = [t for t in self.hits.get(key, ()) if now - t < self.window]
         if live:
             self.hits[key] = live
@@ -75,9 +78,16 @@ class RateLimiter:
         return len(live) >= self.max
 
     def hit(self, key: str) -> None:
-        if len(self.hits) >= self.MAX_KEYS:  # bounded memory; fails open
-            self.hits.clear()
-        self.hits.setdefault(key, []).append(time.monotonic())
+        now = time.monotonic()
+        if key not in self.hits and len(self.hits) >= self.MAX_KEYS:
+            # Full: drop keys whose hits have all expired. Live counters are kept, so
+            # flooding the table with new keys cannot lift anyone's block.
+            self.hits = {
+                k: v for k, v in self.hits.items() if v and now - v[-1] < self.window
+            }
+            if len(self.hits) >= self.MAX_KEYS:
+                key = self.OVERFLOW  # still full: new keys share one counter
+        self.hits.setdefault(key, []).append(now)
 
 
 def client_ip(request: Request) -> str:

@@ -29,11 +29,17 @@ async def grade_session(pool, s: Settings, session_id) -> dict:
     async with pool.connection() as conn:
         async with conn.transaction():
             cur = await conn.execute(
-                "SELECT status FROM feedback_reports WHERE session_id=%s FOR UPDATE", (session_id,)
+                """SELECT status, updated_at > now() - interval '10 minutes' AS recent
+                   FROM feedback_reports WHERE session_id=%s FOR UPDATE""",
+                (session_id,),
             )
             row = await cur.fetchone()
             if row and row["status"] == "ready":
                 return {"status": "ready", "skipped": True}
+            if row and row["status"] == "pending" and row["recent"]:
+                # Another worker claimed it. A claim older than ten minutes is a run
+                # that died, and is taken over.
+                return {"status": "pending", "skipped": True}
             await conn.execute(
                 """INSERT INTO feedback_reports (session_id, status) VALUES (%s,'pending')
                    ON CONFLICT (session_id) DO UPDATE SET status='pending', updated_at=now()""",

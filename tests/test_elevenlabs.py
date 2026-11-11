@@ -132,3 +132,16 @@ async def test_voice_session_reserves_five_minutes_and_passes_session_id(make_en
     assert ev.json()["practice_ends_at"]
     end = await c.post(f"/api/sessions/{sid}/end?reason=agent_ended")
     assert end.status_code == 200 and end.json()["end_reason"] == "agent_ended"
+
+
+async def test_retry_of_the_same_start_reuses_the_token(make_env):
+    """One session, one call credential: a retried start never mints a second token."""
+    calls: list = []
+    env = await make_env(provider_env=PRIVATE_ENV, provider_http=token_http(calls))
+    c = await ready_student(env)
+    k = key()
+    first = await c.post("/api/sessions", json=body(VOICE), headers=k)
+    again = await c.post("/api/sessions", json=body(VOICE), headers=k)
+    assert first.status_code == again.status_code == 200, again.text
+    assert first.json()["launch"] == again.json()["launch"]
+    assert len(calls) == 1

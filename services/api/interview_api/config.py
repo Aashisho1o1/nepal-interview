@@ -44,6 +44,11 @@ class Settings:
     # Off (0) until a provider sends transcripts: without them every short call looks silent.
     no_input_refund_s: int = field(default_factory=lambda: _int("NO_INPUT_REFUND_S", 0))
     signup_enabled: bool = field(default_factory=lambda: _bool("SIGNUP_ENABLED", True))
+    # New accounts per network per hour. Raise it for an onboarding day when many
+    # students sign up from one office or campus address.
+    signups_per_network_per_hour: int = field(
+        default_factory=lambda: _int("SIGNUPS_PER_NETWORK_PER_HOUR", 5)
+    )
     # Free plan (see plans.py): voice sessions every day, and one video session on each
     # of an account's first N days. 0 turns either off.
     free_voice_sessions_per_day: int = field(

@@ -82,7 +82,9 @@ def create_app(
     app.state.prices = load_price_table(s.price_table_path)
     app.state.limiter = RateLimiter(max_hits=8, window_s=600)  # failed logins per email
     app.state.login_ip = RateLimiter(max_hits=30, window_s=600)  # failed logins per network
-    app.state.signups = RateLimiter(max_hits=5, window_s=3600)  # new accounts per network
+    app.state.signups = RateLimiter(  # new accounts per network
+        max_hits=s.signups_per_network_per_hour, window_s=3600
+    )
     # Every sign-up attempt, counted before the password is hashed: hashing is the
     # expensive step, so failed attempts must not be free.
     app.state.signup_tries = RateLimiter(max_hits=20, window_s=3600)
@@ -94,6 +96,22 @@ def create_app(
         return JSONResponse(
             {"error": e.code, "message": e.message, **e.extra}, status_code=e.status
         )
+
+    # Password hashing is deliberately slow and takes about 16 MB each. It runs off the
+    # event loop, a few at a time, and a long queue is refused rather than built up.
+    hash_slots = asyncio.Semaphore(4)
+    hash_waiting = 0
+
+    async def _scrypt(fn, *args):
+        nonlocal hash_waiting
+        if hash_waiting >= 32:
+            raise HTTPException(503, "Busy right now. Please try again in a moment.")
+        hash_waiting += 1
+        try:
+            async with hash_slots:
+                return await asyncio.to_thread(fn, *args)
+        finally:
+            hash_waiting -= 1
 
     @app.middleware("http")
     async def _no_store(request: Request, call_next):
@@ -121,7 +139,7 @@ def create_app(
             user = await cur.fetchone()
         # Off the event loop (scrypt is slow by design), and always run, so the reply
         # takes as long for an unknown email as for a wrong password.
-        ok = await asyncio.to_thread(
+        ok = await _scrypt(
             verify_password, body.password, user["password_hash"] if user else DUMMY_HASH
         )
         if not (user and ok):
@@ -166,7 +184,7 @@ def create_app(
         if app.state.signups.blocked(ip) or app.state.signup_tries.blocked(ip):
             raise HTTPException(429, "Too many new accounts from this network. Try again later.")
         app.state.signup_tries.hit(ip)
-        pw_hash = await asyncio.to_thread(hash_password, body.password)
+        pw_hash = await _scrypt(hash_password, body.password)
         async with app.state.pool.connection() as conn, conn.transaction():
             cur = await conn.execute(
                 "INSERT INTO users (email, password_hash) VALUES (%s,%s) "

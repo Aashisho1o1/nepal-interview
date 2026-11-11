@@ -57,7 +57,7 @@ function summary(rows: Row[]) {
 function downloadCsv(rows: Row[]) {
   const cols = ["date", "name", "email", "mode", "status", "end", "talked_s", "realism", "reply_speed", "av_ok", "use_again", "comment", "transcript"];
   // A leading = + - @ would run as a spreadsheet formula; a quote makes it text.
-  const cell = (v: unknown) => `"${String(v ?? "").replace(/^[=+\-@]/, "'$&").replace(/"/g, '""')}"`;
+  const cell = (v: unknown) => `"${String(v ?? "").replace(/^[=+\-@\t\r]/, "'$&").replace(/"/g, '""')}"`;
   const lines = rows.map((r) =>
     [
       r.created_at, r.name, r.email, MODE[r.mode], r.status, r.end_reason, r.talked_seconds, r.realism,

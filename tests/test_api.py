@@ -772,3 +772,16 @@ async def test_team_sees_every_session_with_rating_and_transcript(make_env):
     assert row["realism"] == 2 and row["comment"] == "The interviewer cut me off."
     assert row["talked_seconds"] >= 60
     assert [t["speaker"] for t in row["turns"]] == ["interviewer", "student", "student"]
+
+
+def test_rate_limiter_keeps_live_blocks_when_full():
+    from interview_api.auth import RateLimiter
+
+    rl = RateLimiter(max_hits=1, window_s=60)
+    rl.MAX_KEYS = 3
+    rl.hit("victim")
+    for i in range(10):
+        rl.hit(f"flood-{i}")
+    assert rl.blocked("victim")  # flooding the table lifts nobody's block
+    assert len(rl.hits) <= rl.MAX_KEYS + 1  # bounded: extra keys share one counter
+    assert not RateLimiter(max_hits=1, window_s=60).blocked("never-seen")

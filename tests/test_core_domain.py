@@ -394,3 +394,11 @@ def test_repair_attempt_then_failure():
     assert Bad.calls == 2  # exactly one repair attempt
     _, _, attempts = grade_with_repair(FixesOnRepair(), ctx_for(s), s, compute_funding(s))
     assert attempts == 2
+
+
+@pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e400", "-1", "abc"])
+def test_amounts_that_are_not_usable_numbers_are_input_errors(bad):
+    from interview_core.funding import FundingInputError, _amount
+
+    with pytest.raises(FundingInputError):
+        _amount(bad, "test")
