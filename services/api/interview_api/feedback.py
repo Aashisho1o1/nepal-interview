@@ -29,11 +29,17 @@ async def grade_session(pool, s: Settings, session_id) -> dict:
     async with pool.connection() as conn:
         async with conn.transaction():
             cur = await conn.execute(
-                "SELECT status FROM feedback_reports WHERE session_id=%s FOR UPDATE", (session_id,)
+                """SELECT status, updated_at > now() - interval '10 minutes' AS recent
+                   FROM feedback_reports WHERE session_id=%s FOR UPDATE""",
+                (session_id,),
             )
             row = await cur.fetchone()
             if row and row["status"] == "ready":
                 return {"status": "ready", "skipped": True}
+            if row and row["status"] == "pending" and row["recent"]:
+                # Another worker claimed it. A claim older than ten minutes is a run
+                # that died, and is taken over.
+                return {"status": "pending", "skipped": True}
             await conn.execute(
                 """INSERT INTO feedback_reports (session_id, status) VALUES (%s,'pending')
                    ON CONFLICT (session_id) DO UPDATE SET status='pending', updated_at=now()""",
@@ -65,8 +71,10 @@ async def grade_session(pool, s: Settings, session_id) -> dict:
         else 0
     )
     ctx = make_context(str(session_id), sess["track"], snapshot, turns, duration_ms)
-    grader = make_grader(s)
+    grader_name = s.grader
     try:
+        grader = make_grader(s)
+        grader_name = grader.name
         card, _raw, attempts = await asyncio.to_thread(
             grade_with_repair, grader, ctx, snapshot, funding
         )
@@ -84,7 +92,7 @@ async def grade_session(pool, s: Settings, session_id) -> dict:
                WHERE session_id=%s""",
             (
                 status,
-                grader.name,
+                grader_name,
                 payload and payload["schema_version"],
                 payload and payload["rubric_version"],
                 attempts,

@@ -21,8 +21,7 @@ redeploys the services whose watched paths changed.
 3. In that project, open Project Settings > Shared Variables (production) and add:
    `ELEVENLABS_AGENT_ID`, `ELEVENLABS_API_KEY`, `LIVEAVATAR_EMBED_URL`, and
    `ELEVENLABS_BRANCH_ID` if you use a branch. Enable authentication on the agent; the
-   API refuses a public agent here. Add `TEAM_EMAILS` (founders' sign-in emails,
-   comma-separated) to let them open `/team`, the review of every session.
+   API refuses a public agent here.
 4. From the repo root:
 
    ```bash
@@ -49,6 +48,15 @@ redeploys the services whose watched paths changed.
    main README).
 
 7. Open the `web` address and sign in.
+8. To let a founder open `/team` (every session, rating and transcript), have them
+   sign up first, then run inside the API container:
+
+   ```bash
+   python -m interview_api.accounts grant-team founder@example.com
+   ```
+
+   Access is a role on the account, not an email list, so nobody gains it by signing
+   up with a founder's address. `revoke-team` removes it.
 
 ## Later changes
 

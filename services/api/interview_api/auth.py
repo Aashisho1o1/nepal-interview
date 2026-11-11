@@ -11,7 +11,6 @@ import hashlib
 import hmac
 import secrets
 import time
-from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
@@ -36,6 +35,10 @@ def verify_password(pw: str, stored: str) -> bool:
     return hmac.compare_digest(dk.hex(), digest)
 
 
+# Checked when no account matches, so a sign-in takes the same time either way.
+DUMMY_HASH = hash_password(secrets.token_urlsafe(16))
+
+
 def token_hash(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -54,17 +57,37 @@ class RateLimiter:
     """Per-process sliding-window counter (failed logins, sign-ups). A shared store is
     needed with more than one API process."""
 
+    MAX_KEYS = 50_000
+    OVERFLOW = "\x00overflow"
+
     def __init__(self, max_hits: int, window_s: int):
         self.max, self.window = max_hits, window_s
-        self.hits: dict[str, list[float]] = defaultdict(list)
+        self.hits: dict[str, list[float]] = {}
 
     def blocked(self, key: str) -> bool:
+        # Reading never stores a key, and keys with no recent hits are dropped, so
+        # callers cannot grow the table by probing with made-up keys.
         now = time.monotonic()
-        self.hits[key] = [t for t in self.hits[key] if now - t < self.window]
-        return len(self.hits[key]) >= self.max
+        if key not in self.hits and len(self.hits) >= self.MAX_KEYS:
+            key = self.OVERFLOW
+        live = [t for t in self.hits.get(key, ()) if now - t < self.window]
+        if live:
+            self.hits[key] = live
+        else:
+            self.hits.pop(key, None)
+        return len(live) >= self.max
 
     def hit(self, key: str) -> None:
-        self.hits[key].append(time.monotonic())
+        now = time.monotonic()
+        if key not in self.hits and len(self.hits) >= self.MAX_KEYS:
+            # Full: drop keys whose hits have all expired. Live counters are kept, so
+            # flooding the table with new keys cannot lift anyone's block.
+            self.hits = {
+                k: v for k, v in self.hits.items() if v and now - v[-1] < self.window
+            }
+            if len(self.hits) >= self.MAX_KEYS:
+                key = self.OVERFLOW  # still full: new keys share one counter
+        self.hits.setdefault(key, []).append(now)
 
 
 def client_ip(request: Request) -> str:

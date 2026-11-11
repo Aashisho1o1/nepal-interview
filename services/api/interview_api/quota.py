@@ -116,15 +116,30 @@ async def start_session(
                         return StartResult(existing, False)
 
                     cur = await conn.execute(
-                        "SELECT count(*)::int AS n FROM interview_sessions WHERE student_id=%s "
-                        "AND created_at > now() - interval '10 minutes'",
+                        """SELECT count(*) FILTER (
+                                    WHERE created_at > now() - interval '10 minutes')::int AS recent,
+                                  count(*) FILTER (
+                                    WHERE status IN ('failed','completed')
+                                      AND COALESCE(charged_premium_seconds,0)
+                                        + COALESCE(charged_basic_seconds,0) = 0
+                                      AND end_reason <> 'provider_launch_failed')::int AS uncharged
+                           FROM interview_sessions
+                           WHERE student_id=%s AND created_at > now() - interval '1 day'""",
                         (student_id,),
                     )
-                    if (await cur.fetchone())["n"] >= s.max_starts_per_10min:
+                    n = await cur.fetchone()
+                    if n["recent"] >= s.max_starts_per_10min:
                         raise QuotaError(
                             429,
                             "rate_limited",
                             "Too many session starts. Please wait a few minutes.",
+                        )
+                    if n["uncharged"] >= s.max_uncharged_per_day:
+                        raise QuotaError(
+                            429,
+                            "rate_limited",
+                            "Several sessions did not connect today. Check your connection "
+                            "and try again tomorrow.",
                         )
 
                     ent, _avail = await _lock_entitlement(

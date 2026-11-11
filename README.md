@@ -113,6 +113,22 @@ to five an hour per student and per network. On Railway, run these inside the AP
 container (`railway ssh --service api`), after loading the server's environment:
 `export $(tr '\0' '\n' < /proc/1/environ | grep -E '^(PATH|DATABASE_URL|PYTHONPATH)=')`.
 
+## Operations
+
+- **Team access.** `/team` shows every session and transcript to accounts with the
+  `admin` role. Grant it to an existing account with
+  `python -m interview_api.accounts grant-team EMAIL` (`revoke-team` removes it).
+- **Schema changes.** The API applies `schema.sql` when it starts. For a deploy with
+  no table locks taken by a starting server, run `python -m interview_api.migrate` as a
+  release step and set `APPLY_SCHEMA_ON_START=false`; the API's database role then
+  needs no rights to change tables.
+- **Health.** `/livez` answers when the process is up; `/healthz` also checks the
+  database and returns 503 when it cannot be reached.
+- **Abuse limits.** Sign-up attempts and failed sign-ins are limited per network, and
+  a student can end `MAX_UNCHARGED_PER_DAY` (default 5) sessions a day without being
+  charged. Voice and Keyframe calls cannot be stopped from the server, so also set a
+  maximum call length on the agents in the vendor dashboards.
+
 ## Before any paid use
 
 Turn on authentication for the ElevenLabs agent and set `ELEVENLABS_API_KEY`; restrict

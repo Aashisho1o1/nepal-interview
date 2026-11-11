@@ -52,8 +52,6 @@ export default defineRailway((ctx) => {
     KEYFRAME_PERSONA: ctx.shared.KEYFRAME_PERSONA,
     // Comma-separated provider ids to offer. Unset = every configured one.
     ENABLED_PROVIDERS: ctx.shared.ENABLED_PROVIDERS,
-    // Founders' sign-in emails, comma-separated: they can open /team. Missing = nobody.
-    TEAM_EMAILS: ctx.shared.TEAM_EMAILS,
   };
 
   const api = service("api", {

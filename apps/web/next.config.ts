@@ -26,6 +26,20 @@ const permissionsPolicy = [
   "geolocation=()",
 ].join(", ");
 
+// Enforced: nothing may frame the site (clickjacking), and forms and <base> stay here.
+const csp = "frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+// Report-only until real calls confirm the vendor hosts: violations show in the browser
+// console and block nothing. Tighten it, then move it into `csp`.
+const cspReportOnly = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
+  "connect-src 'self' https: wss:",
+  `frame-src ${EMBED_ORIGINS.join(" ") || "'none'"}`,
+].join("; ");
+
 const nextConfig: NextConfig = {
   devIndicators: { position: "bottom-right" },
   async rewrites() {
@@ -41,6 +55,11 @@ const nextConfig: NextConfig = {
           { key: "Permissions-Policy", value: permissionsPolicy },
           { key: "Referrer-Policy", value: "same-origin" },
           { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          // Ignored by browsers over plain http, so local development is unaffected.
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+          { key: "Content-Security-Policy", value: csp },
+          { key: "Content-Security-Policy-Report-Only", value: cspReportOnly },
         ],
       },
     ];

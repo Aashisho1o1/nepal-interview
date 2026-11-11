@@ -32,7 +32,7 @@ export default function Privacy() {
         </p>
         <ul>
           <li><strong>Voice calls:</strong> these services also receive your name and the details you added, so the interviewer can ask about them.</li>
-          <li><strong>Video calls:</strong> they don&apos;t receive the details you typed. They do receive anything you say out loud.</li>
+          <li><strong>Video calls:</strong> they receive anything you say out loud. Some video interviewers also receive your name and the details you added; the practice page says which before you start.</li>
         </ul>
         <p>We don&apos;t store recordings or written transcripts of your calls ourselves.</p>
         <p>Please don&apos;t say or type anything you don&apos;t want shared with these services, such as passport or bank account numbers.</p>

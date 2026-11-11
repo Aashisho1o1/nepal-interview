@@ -24,11 +24,17 @@ def make_pool(dsn: str, max_size: int = 20) -> AsyncConnectionPool:
     )
 
 
-async def apply_schema(pool: AsyncConnectionPool) -> None:
+async def apply_schema(pool: AsyncConnectionPool, *, lock_timeout_s: int = 0) -> None:
     """Idempotent. Serverless hosts start several instances at once; the lock makes
-    them apply the schema one after another instead of racing on the DDL."""
+    them apply the schema one after another instead of racing on the DDL.
+
+    The ALTER statements need an exclusive table lock. With `lock_timeout_s` set, a
+    migration that cannot get it gives up (and can be re-run) instead of queueing and
+    blocking every request behind it."""
     async with pool.connection() as conn, conn.transaction():
         await conn.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK,))
+        if lock_timeout_s:
+            await conn.execute(f"SET LOCAL lock_timeout = '{int(lock_timeout_s)}s'")
         await conn.execute(SCHEMA)
 
 

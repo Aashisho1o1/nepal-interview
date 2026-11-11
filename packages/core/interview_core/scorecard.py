@@ -152,6 +152,8 @@ def validate_scorecard(raw: object, ctx: ValidationContext) -> Scorecard:
         errors.append("unsupported schema_version")
     if card.rubric_version != RUBRIC_VERSION:
         errors.append("unexpected rubric_version")
+    if card.human_review_status != "not_reviewed":
+        errors.append("an automatic report cannot claim human review")
 
     turns = {t.turn_id: t for t in ctx.turns}
     for i, f in enumerate(card.findings):
@@ -162,6 +164,8 @@ def validate_scorecard(raw: object, ctx: ValidationContext) -> Scorecard:
             continue
         if t.speaker != "student":
             errors.append(f"{where} quotes an interviewer turn; findings must cite the student")
+        if t.canceled:
+            errors.append(f"{where} cites a canceled turn")
         q = _norm(f.observed_quote)
         if not q or q not in _norm(t.text):
             errors.append(f"{where}.observed_quote is not verbatim in turn {f.turn_id}")

@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import type { IframeLaunch, StageProps } from "@/lib/providers";
 
 const HEARTBEAT_MS = 15_000;
+const CLOCK_RETRY_MS = 2_000;
 const LOAD_WARN_MS = 25_000;
 const MAX_MESSAGE_TYPES = 20;
 
@@ -20,6 +21,7 @@ export default function IframeStage({ sessionId, launch, onPhase, onClock, onNot
   const mountedAt = useRef(0); // set when the call mounts (render must stay pure)
   const loadedAt = useRef<number | null>(null);
   const started = useRef(false);
+  const unmounted = useRef(false);
   // Keep the latest callbacks without re-running effects (and re-mounting the call).
   const cb = useRef({ onPhase, onClock, onNotice, onEnded });
   useEffect(() => {
@@ -33,23 +35,33 @@ export default function IframeStage({ sessionId, launch, onPhase, onClock, onNot
   const startClock = useRef(async (trigger: string) => {
     if (started.current) return;
     started.current = true;
-    const now = performance.now();
-    try {
-      const r = await post("media_ready", {
-        trigger,
-        load_ms: loadedAt.current ? Math.round(loadedAt.current - mountedAt.current) : null,
-        ready_ms: Math.round(now - mountedAt.current),
-      });
-      if (r.practice_ends_at) cb.current.onClock(r.practice_ends_at * 1000);
-      cb.current.onPhase("in_call");
-      if (!r.live) cb.current.onEnded("settled_elsewhere");
-    } catch {
-      cb.current.onNotice("Could not start the practice clock. Your time is not being counted.");
+    const payload = {
+      trigger,
+      load_ms: loadedAt.current ? Math.round(loadedAt.current - mountedAt.current) : null,
+      ready_ms: Math.round(performance.now() - mountedAt.current),
+    };
+    // If the server can't be told, end the call (the session is refunded) rather than
+    // let it run uncounted.
+    for (const wait of [0, CLOCK_RETRY_MS]) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      if (unmounted.current) return;
+      try {
+        const r = await post("media_ready", payload);
+        if (unmounted.current) return;
+        if (r.practice_ends_at) cb.current.onClock(r.practice_ends_at * 1000);
+        cb.current.onPhase("in_call");
+        if (!r.live) cb.current.onEnded("settled_elsewhere");
+        return;
+      } catch {
+        /* try once more */
+      }
     }
+    cb.current.onEnded("connect_failed");
   });
 
   useEffect(() => {
     mountedAt.current = performance.now();
+    unmounted.current = false;
     const frame = frameRef.current;
     const seenTypes = new Set<string>();
 
@@ -93,6 +105,7 @@ export default function IframeStage({ sessionId, launch, onPhase, onClock, onNot
     window.addEventListener("blur", onBlur);
     window.addEventListener("message", onMessage);
     return () => {
+      unmounted.current = true;
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("message", onMessage);
       clearTimeout(loadWarn);

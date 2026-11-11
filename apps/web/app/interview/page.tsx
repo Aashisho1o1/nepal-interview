@@ -17,6 +17,7 @@ import { DATA_NOTE, DISCLAIMER, micErrorMessage } from "@/lib/copy";
 import { PHASE_TEXT, type Launch, type Phase, type ProviderInfo, type StageProps, type StartResp } from "@/lib/providers";
 
 const KEY_STORE = "ni-start-key";
+const END_TIMEOUT_MS = 8_000;
 
 type Live = { id: string; launch: Launch };
 
@@ -39,6 +40,7 @@ export default function Interview() {
   const [endsAt, setEndsAt] = useState<number | null>(null);
   const [now, setNow] = useState(0);
   const [liveConflict, setLiveConflict] = useState<string | null>(null);
+  const [ending, setEnding] = useState(false);
   const endedRef = useRef(false);
   const sessionRef = useRef<string | null>(null);
 
@@ -74,6 +76,7 @@ export default function Interview() {
     const id = sessionRef.current;
     setLive(null); // unmounts the stage: disconnects the call / removes the iframe
     setEndsAt(null);
+    setEnding(false);
     sessionRef.current = null;
     setPhase("completed");
     if (id) router.push(`/sessions/${id}`);
@@ -82,10 +85,17 @@ export default function Interview() {
   const endNow = useCallback(
     async (reason = "ended") => {
       const id = sessionRef.current;
+      // Hang up first: the call must stop even if the server is slow to answer.
+      setEnding(true);
+      setLive(null);
+      setEndsAt(null);
       if (id && !endedRef.current) {
         endedRef.current = true;
         const r = reason === "ended" ? "student_ended" : reason;
-        await api(`/sessions/${id}/end?reason=${encodeURIComponent(r)}`, { method: "POST" }).catch(() => undefined);
+        await api(`/sessions/${id}/end?reason=${encodeURIComponent(r)}`, {
+          method: "POST",
+          signal: AbortSignal.timeout(END_TIMEOUT_MS),
+        }).catch(() => undefined); // the reconciler settles it if this never arrives
       }
       finish();
     },
@@ -177,7 +187,8 @@ export default function Interview() {
           : undefined
       }
     >
-      {!live && (
+      {ending && <div className="state" aria-live="polite">Ending your session…</div>}
+      {!live && !ending && (
         <>
           <TierCards
             options={providers.map((p) => ({
