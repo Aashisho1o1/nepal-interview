@@ -46,7 +46,9 @@ from .reconcile import close_vendor, reconcile_once
 
 log = logging.getLogger("interview_api")
 
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Domain labels contain no dots, so there is one way to match: linear time on any
+# input (the looser form backtracked quadratically on strings like "!@!.!.!.").
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$")
 SIGNUP_PACKAGE = "signup-trial-v1"
 # Browser-reported events kept per session; a normal call sends about twenty.
 MAX_EVENTS_PER_SESSION = 300
