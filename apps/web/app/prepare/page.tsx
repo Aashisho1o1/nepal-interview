@@ -105,7 +105,7 @@ export default function AboutYou() {
       step={2}
       width="narrow"
       title="About you"
-      intro="Five quick details help your voice interviewer ask about your plans. The video interviewer doesn't receive them. All optional: skip any you'd rather not share."
+      intro="Five quick details help your interviewer ask about your plans. The practice page says which interviewers receive them. All optional: skip any you'd rather not share."
     >
       <form onSubmit={save}>
         <div className="card">{QUICK.map(field)}</div>
@@ -120,7 +120,7 @@ export default function AboutYou() {
           <div className="card">
             <h2>Want a more realistic interview?</h2>
             <p className="small">
-              Add your full details, like funding, English test and study history, so your voice interviewer can ask what
+              Add your full details, like funding, English test and study history, so your interviewer can ask what
               the real one would.
             </p>
             <button type="button" className="btn btn-secondary" onClick={() => setBioOpen(true)}>

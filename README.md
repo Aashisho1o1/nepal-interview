@@ -122,6 +122,9 @@ container (`railway ssh --service api`), after loading the server's environment:
   no table locks taken by a starting server, run `python -m interview_api.migrate` as a
   release step and set `APPLY_SCHEMA_ON_START=false`; the API's database role then
   needs no rights to change tables.
+- **Removing an interviewer.** Turn its tier off or drop it from `ENABLED_PROVIDERS`
+  first, wait for its live sessions to end, then remove its settings. Sessions of a
+  provider the API no longer loads are not stopped at the vendor.
 - **Health.** `/livez` answers when the process is up; `/healthz` also checks the
   database and returns 503 when it cannot be reached.
 - **Abuse limits.** Sign-up attempts and failed sign-ins are limited per network, and

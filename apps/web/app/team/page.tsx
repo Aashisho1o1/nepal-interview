@@ -1,8 +1,8 @@
 "use client";
 
 // Team-only review of every practice session: how it ended, the student's rating
-// and comment, the transcript and the automatic feedback. Only the emails in the
-// server's TEAM_EMAILS can load the data; everyone else gets "not found".
+// and comment, the transcript and the automatic feedback. Only accounts with the admin role
+// (python -m interview_api.accounts grant-team) can load it; everyone else gets "not found".
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";

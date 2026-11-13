@@ -42,6 +42,7 @@ export default function Interview() {
   const [liveConflict, setLiveConflict] = useState<string | null>(null);
   const [ending, setEnding] = useState(false);
   const endedRef = useRef(false);
+  const goneRef = useRef(false); // the student has left this page
   const sessionRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -61,6 +62,7 @@ export default function Interview() {
 
   // Leaving the page ends the session server-side (settles credits, stops the vendor).
   useEffect(() => {
+    goneRef.current = false; // React's dev double mount runs the cleanup once first
     const onHide = () => {
       const id = sessionRef.current;
       if (id && !endedRef.current) {
@@ -69,7 +71,11 @@ export default function Interview() {
       }
     };
     window.addEventListener("pagehide", onHide);
-    return () => window.removeEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      goneRef.current = true;
+      onHide(); // in-app navigation (Back) unmounts the page without a pagehide
+    };
   }, []);
 
   const finish = useCallback(() => {
@@ -141,8 +147,14 @@ export default function Interview() {
         method: "POST",
         headers: { "idempotency-key": key },
         json: { track: "uk_pre_cas", provider_id: providerId },
+        signal: AbortSignal.timeout(45_000), // the server may wait on two vendor calls
       });
       sessionStorage.removeItem(KEY_STORE);
+      if (goneRef.current) {
+        // Left while it was starting: end it now instead of leaving it to time out.
+        navigator.sendBeacon(`/api/sessions/${s.session_id}/end?reason=page_exit`, new Blob([""], { type: "text/plain" }));
+        return;
+      }
       sessionRef.current = s.session_id;
       setLive({ id: s.session_id, launch: s.launch });
       setPhase("connecting");

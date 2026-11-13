@@ -139,7 +139,7 @@ async def start_session(
                             429,
                             "rate_limited",
                             "Several sessions did not connect today. Check your connection "
-                            "and try again tomorrow.",
+                            "and try again later.",
                         )
 
                     ent, _avail = await _lock_entitlement(
@@ -277,7 +277,8 @@ async def settle_session(
 
         cur = await conn.execute(
             """UPDATE interview_sessions SET status=%s, ended_at=%s, end_reason=%s,
-                   charged_premium_seconds=%s, charged_basic_seconds=%s, waived_seconds=%s
+                   charged_premium_seconds=%s, charged_basic_seconds=%s, waived_seconds=%s,
+                   launch_json=NULL  -- holds call credentials; nothing needs it once ended
                WHERE id=%s RETURNING *""",
             (status, end, reason, premium, basic, waived, session_id),
         )

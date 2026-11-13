@@ -13,7 +13,7 @@
     "@elevenlabs/react": "1.18.0",
     "@heygen/liveavatar-web-sdk": "0.0.20",
     "@keyframelabs/elements": "0.7.0",
-    "next": "16.4.3",
+    "next": "16.4.5",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
@@ -22,7 +22,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.5",
     "typescript": "^5"
   }
 }

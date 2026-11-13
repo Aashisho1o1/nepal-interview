@@ -26,12 +26,14 @@ from .quota import settle_session
 log = logging.getLogger("interview_api.reconcile")
 
 
-async def _mark_vendor_closed(pool, session_id) -> None:
+async def _mark_vendor_closed(pool, session_id, vendor_ref) -> None:
+    # Only for the vendor id that was closed: an older copy of the row without the id
+    # must not mark a call that was stored meanwhile (and may still be running).
     async with pool.connection() as conn:
         await conn.execute(
             "UPDATE interview_sessions SET vendor_closed_at = now() WHERE id=%s "
-            "AND vendor_closed_at IS NULL",
-            (session_id,),
+            "AND vendor_closed_at IS NULL AND vendor_ref IS NOT DISTINCT FROM %s",
+            (session_id, vendor_ref),
         )
 
 
@@ -43,7 +45,7 @@ async def close_vendor(pool, sess, registry) -> bool:
     prov = registry.providers.get(sess.get("provider_id"))
     ok = await prov.close(sess) if prov else True
     if ok:
-        await _mark_vendor_closed(pool, sess["id"])
+        await _mark_vendor_closed(pool, sess["id"], sess.get("vendor_ref"))
     return ok
 
 
@@ -79,12 +81,14 @@ async def reconcile_once(pool, s: Settings, registry, *, feedback_grace_s: int =
                 log.exception("reconcile %s failed for session %s", counter, sid)
 
     async def settle_startup(sess) -> None:
-        await settle_session(pool, s, sess["id"], "reconciled_startup_timeout")
-        await close_vendor(pool, sess, registry)
+        out = await settle_session(pool, s, sess["id"], "reconciled_startup_timeout")
+        await close_vendor(pool, out, registry)
 
     async def settle_stale(sess) -> None:
-        await settle_session(pool, s, sess["id"], "reconciled_stale", use_heartbeat_as_end=True)
-        await close_vendor(pool, sess, registry)
+        out = await settle_session(
+            pool, s, sess["id"], "reconciled_stale", use_heartbeat_as_end=True
+        )
+        await close_vendor(pool, out, registry)
 
     await each("startup_timeouts", startup, settle_startup)
     await each("stale_active", stale, settle_stale)
@@ -112,9 +116,7 @@ async def reconcile_once(pool, s: Settings, registry, *, feedback_grace_s: int =
     await each("graded", ungraded, lambda sid: grade_session(pool, s, sid))
     # Sign-in rows nobody can use any more.
     async with pool.connection() as conn:
-        await conn.execute(
-            "DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days'"
-        )
+        await conn.execute("DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days'")
     return report
 
 

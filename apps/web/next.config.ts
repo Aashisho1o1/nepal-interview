@@ -57,7 +57,7 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           // Ignored by browsers over plain http, so local development is unaffected.
-          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+          { key: "Strict-Transport-Security", value: "max-age=63072000" },
           { key: "Content-Security-Policy", value: csp },
           { key: "Content-Security-Policy-Report-Only", value: cspReportOnly },
         ],

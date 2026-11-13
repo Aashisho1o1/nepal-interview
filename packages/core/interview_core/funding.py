@@ -28,7 +28,6 @@ from typing import Any
 from .facts import facts_by_field, first_value
 
 CENT = Decimal("0.01")
-MAX_AMOUNT = Decimal("1e15")  # far above any real figure; keeps arithmetic in range
 
 
 class FundingInputError(ValueError):
@@ -42,7 +41,7 @@ def _amount(raw: Any, where: str) -> Decimal:
         d = Decimal(str(raw).replace(",", "").strip())
     except InvalidOperation as e:
         raise FundingInputError(f"{where}: amount {raw!r} is not a number") from e
-    if not d.is_finite() or abs(d) >= MAX_AMOUNT:
+    if not d.is_finite() or d.adjusted() >= 15:  # 1e15 and up: no real figure is that big
         raise FundingInputError(f"{where}: amount {raw!r} is not a usable number")
     if d < 0:
         raise FundingInputError(f"{where}: amount is negative")

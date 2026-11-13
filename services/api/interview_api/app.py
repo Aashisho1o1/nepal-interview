@@ -82,14 +82,16 @@ def create_app(
     app = FastAPI(title="Nepal interview session API", lifespan=lifespan, **docs)
     app.state.settings = s
     app.state.prices = load_price_table(s.price_table_path)
-    app.state.limiter = RateLimiter(max_hits=8, window_s=600)  # failed logins per email
-    app.state.login_ip = RateLimiter(max_hits=30, window_s=600)  # failed logins per network
+    app.state.limiter = RateLimiter(max_hits=8, window_s=600)  # every login, per email
+    app.state.login_ip = RateLimiter(max_hits=30, window_s=600)  # failed logins, per network
     app.state.signups = RateLimiter(  # new accounts per network
         max_hits=s.signups_per_network_per_hour, window_s=3600
     )
     # Every sign-up attempt, counted before the password is hashed: hashing is the
     # expensive step, so failed attempts must not be free.
-    app.state.signup_tries = RateLimiter(max_hits=20, window_s=3600)
+    app.state.signup_tries = RateLimiter(
+        max_hits=max(20, 4 * s.signups_per_network_per_hour), window_s=3600
+    )
     # Wrong promo codes: per student and per network, so codes can't be guessed.
     app.state.code_tries = RateLimiter(max_hits=5, window_s=3600)
 
@@ -136,6 +138,10 @@ def create_app(
         ip = f"ip:{client_ip(request)}"
         if app.state.limiter.blocked(key) or app.state.login_ip.blocked(ip):
             raise HTTPException(429, "too many attempts")
+        # Counted before any await, so parallel attempts can't all pass. A correct password
+        # gives back the network count only: students share addresses, accounts don't.
+        app.state.limiter.hit(key)
+        app.state.login_ip.hit(ip)
         async with app.state.pool.connection() as conn:
             cur = await conn.execute("SELECT id, password_hash FROM users WHERE email=%s", (key,))
             user = await cur.fetchone()
@@ -145,9 +151,8 @@ def create_app(
             verify_password, body.password, user["password_hash"] if user else DUMMY_HASH
         )
         if not (user and ok):
-            app.state.limiter.hit(key)
-            app.state.login_ip.hit(ip)
             raise HTTPException(401, "invalid email or password")
+        app.state.login_ip.undo(ip)
         async with app.state.pool.connection() as conn, conn.transaction():
             raw, exp = await create_login(conn, user["id"], s.login_ttl_hours)
             await audit(conn, str(user["id"]), "auth.login", "user", str(user["id"]))
@@ -185,24 +190,30 @@ def create_app(
         ip = client_ip(request)
         if app.state.signups.blocked(ip) or app.state.signup_tries.blocked(ip):
             raise HTTPException(429, "Too many new accounts from this network. Try again later.")
+        # Counted before any await, so sign-ups that arrive together cannot all pass. A
+        # sign-up that fails gives its place back.
         app.state.signup_tries.hit(ip)
-        pw_hash = await _scrypt(hash_password, body.password)
-        async with app.state.pool.connection() as conn, conn.transaction():
-            cur = await conn.execute(
-                "INSERT INTO users (email, password_hash) VALUES (%s,%s) "
-                "ON CONFLICT (email) DO NOTHING RETURNING id",
-                (email, pw_hash),
-            )
-            user = await cur.fetchone()
-            if user is None:
-                raise HTTPException(
-                    409, "An account with this email already exists. Sign in instead."
-                )
-            # Practice time comes from the free plan (plans.py), granted day by day.
-            await provision_student(conn, user["id"], name, {}, SIGNUP_PACKAGE)
-            raw, exp = await create_login(conn, user["id"], s.login_ttl_hours)
-            await audit(conn, str(user["id"]), "auth.signup", "user", str(user["id"]))
         app.state.signups.hit(ip)
+        try:
+            pw_hash = await _scrypt(hash_password, body.password)
+            async with app.state.pool.connection() as conn, conn.transaction():
+                cur = await conn.execute(
+                    "INSERT INTO users (email, password_hash) VALUES (%s,%s) "
+                    "ON CONFLICT (email) DO NOTHING RETURNING id",
+                    (email, pw_hash),
+                )
+                user = await cur.fetchone()
+                if user is None:
+                    raise HTTPException(
+                        409, "An account with this email already exists. Sign in instead."
+                    )
+                # Practice time comes from the free plan (plans.py), granted day by day.
+                await provision_student(conn, user["id"], name, {}, SIGNUP_PACKAGE)
+                raw, exp = await create_login(conn, user["id"], s.login_ttl_hours)
+                await audit(conn, str(user["id"]), "auth.signup", "user", str(user["id"]))
+        except BaseException:
+            app.state.signups.undo(ip)
+            raise
         _set_login_cookie(response, raw, exp)
         return {"ok": True}
 
@@ -242,6 +253,11 @@ def create_app(
         keys = (f"student:{st['student_id']}", f"ip:{client_ip(request)}")
         if any(app.state.code_tries.blocked(k) for k in keys):
             raise HTTPException(429, "Too many tries. Wait an hour and try again.")
+        # The student is counted before any await, so one account's parallel guesses can't
+        # all pass; the network only for a wrong code, so a room redeeming a right code
+        # together is never blocked.
+        student, network = keys
+        app.state.code_tries.hit(student)
         try:
             async with app.state.pool.connection() as conn, conn.transaction():
                 granted = await plans.redeem(conn, st["student_id"], body.code)
@@ -250,9 +266,11 @@ def create_app(
                 )
         except HTTPException as e:
             if e.status_code == 404:  # only wrong codes count as guesses
-                for k in keys:
-                    app.state.code_tries.hit(k)
+                app.state.code_tries.hit(network)
+                raise
+            app.state.code_tries.undo(student)
             raise
+        app.state.code_tries.undo(student)
         return granted
 
     @app.get("/api/providers")
@@ -280,13 +298,12 @@ def create_app(
         value: Any | None = None
 
     def _same_shape(old: Any, new: Any) -> bool:
+        def short(v: Any) -> bool:  # a correction is a short value, never a document
+            return isinstance(v, (int, bool, type(None))) or (isinstance(v, str) and len(v) <= 400)
+
         if isinstance(old, dict):
-            return (
-                isinstance(new, dict)
-                and set(new) <= set(old)
-                and all(isinstance(v, (str, int, bool, type(None))) for v in new.values())
-            )
-        return type(old) is type(new) and (not isinstance(new, str) or len(new) <= 400)
+            return isinstance(new, dict) and set(new) <= set(old) and all(map(short, new.values()))
+        return type(old) is type(new) and short(new)
 
     @app.patch("/api/profile/facts/{ref}", dependencies=[Depends(origin_guard)])
     async def update_fact(ref: str, body: FactUpdate, st=Depends(current_student)):
@@ -314,9 +331,12 @@ def create_app(
     async def _new_snapshot(conn, student_id) -> dict:
         """Freeze the student's confirmed facts into a new snapshot version. Call inside a
         transaction."""
-        cur = await conn.execute(
-            "SELECT * FROM extracted_facts WHERE student_id=%s FOR UPDATE", (student_id,)
+        # One snapshot at a time per student, so two requests can't take the same version.
+        # The facts are only read: locking them here as well could deadlock with a save.
+        await conn.execute(
+            "SELECT 1 FROM student_profiles WHERE id=%s FOR NO KEY UPDATE", (student_id,)
         )
+        cur = await conn.execute("SELECT * FROM extracted_facts WHERE student_id=%s", (student_id,))
         rows = await cur.fetchall()
         cur = await conn.execute(
             "SELECT COALESCE(MAX(version),0)+1 AS v FROM profile_snapshots WHERE student_id=%s",
@@ -534,11 +554,21 @@ def create_app(
                 await asyncio.sleep(0.25)
             raise QuotaError(409, "launch_in_progress", "Still connecting; try again.")
         launch = await prov.launch(ctx)
+        # Stored only if the session is still live. If it ended while the vendor was
+        # creating the call, keep the vendor's id so the call is stopped (here, or by the
+        # reconciler if this stop fails) and give the student nothing.
         async with app.state.pool.connection() as conn:
-            await conn.execute(
-                "UPDATE interview_sessions SET launch_json=%s, vendor_ref=%s WHERE id=%s",
-                (Jsonb(launch), launch.get("vendor_ref"), sess["id"]),
+            cur = await conn.execute(
+                """UPDATE interview_sessions SET vendor_ref=%s,
+                     launch_json = CASE WHEN status IN ('created','active') THEN %s END,
+                     vendor_closed_at = NULL
+                   WHERE id=%s RETURNING *""",
+                (launch.get("vendor_ref"), Jsonb(launch), sess["id"]),
             )
+            row = await cur.fetchone()
+        if row["launch_json"] is None:
+            await close_vendor(app.state.pool, row, app.state.providers)
+            raise QuotaError(409, "session_ended", "That session has already ended.")
         return launch
 
     async def _own_session(conn, session_id: str, student_id, *, lock: bool = False):
@@ -612,7 +642,7 @@ def create_app(
         async with app.state.pool.connection() as conn:
             sess = await _own_session(conn, session_id, st["student_id"])
         out = await settle_session(app.state.pool, s, sess["id"], reason)
-        await close_vendor(app.state.pool, sess, app.state.providers)
+        await close_vendor(app.state.pool, out, app.state.providers)
         return _public(out)
 
     @app.get("/api/sessions/{session_id}/feedback")
@@ -823,7 +853,7 @@ def create_app(
     async def healthz():
         """Readiness: the process is up and the database answers."""
         try:
-            async with app.state.pool.connection(timeout=2) as conn:
+            async with asyncio.timeout(3), app.state.pool.connection() as conn:
                 await conn.execute("SELECT 1")
         except Exception:
             log.exception("health check: database unavailable")
