@@ -69,7 +69,10 @@ export default function Interview() {
       }
     };
     window.addEventListener("pagehide", onHide);
-    return () => window.removeEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      onHide(); // in-app navigation (Back) unmounts the page without a pagehide
+    };
   }, []);
 
   const finish = useCallback(() => {

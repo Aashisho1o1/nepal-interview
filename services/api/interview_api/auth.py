@@ -82,12 +82,15 @@ class RateLimiter:
         if key not in self.hits and len(self.hits) >= self.MAX_KEYS:
             # Full: drop keys whose hits have all expired. Live counters are kept, so
             # flooding the table with new keys cannot lift anyone's block.
-            self.hits = {
-                k: v for k, v in self.hits.items() if v and now - v[-1] < self.window
-            }
+            self.hits = {k: v for k, v in self.hits.items() if v and now - v[-1] < self.window}
             if len(self.hits) >= self.MAX_KEYS:
                 key = self.OVERFLOW  # still full: new keys share one counter
         self.hits.setdefault(key, []).append(now)
+
+    def undo(self, key: str) -> None:
+        """Take back the latest hit (an attempt counted up front that did not count)."""
+        if self.hits.get(key):
+            self.hits[key].pop()
 
 
 def client_ip(request: Request) -> str:

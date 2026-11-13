@@ -105,7 +105,7 @@ export default function AboutYou() {
       step={2}
       width="narrow"
       title="About you"
-      intro="Five quick details help your voice interviewer ask about your plans. The video interviewer doesn't receive them. All optional: skip any you'd rather not share."
+      intro="Five quick details help your interviewer ask about your plans. The practice page says which interviewers receive them. All optional: skip any you'd rather not share."
     >
       <form onSubmit={save}>
         <div className="card">{QUICK.map(field)}</div>

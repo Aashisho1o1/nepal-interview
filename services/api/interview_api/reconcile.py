@@ -79,12 +79,14 @@ async def reconcile_once(pool, s: Settings, registry, *, feedback_grace_s: int =
                 log.exception("reconcile %s failed for session %s", counter, sid)
 
     async def settle_startup(sess) -> None:
-        await settle_session(pool, s, sess["id"], "reconciled_startup_timeout")
-        await close_vendor(pool, sess, registry)
+        out = await settle_session(pool, s, sess["id"], "reconciled_startup_timeout")
+        await close_vendor(pool, out, registry)
 
     async def settle_stale(sess) -> None:
-        await settle_session(pool, s, sess["id"], "reconciled_stale", use_heartbeat_as_end=True)
-        await close_vendor(pool, sess, registry)
+        out = await settle_session(
+            pool, s, sess["id"], "reconciled_stale", use_heartbeat_as_end=True
+        )
+        await close_vendor(pool, out, registry)
 
     await each("startup_timeouts", startup, settle_startup)
     await each("stale_active", stale, settle_stale)
@@ -112,9 +114,7 @@ async def reconcile_once(pool, s: Settings, registry, *, feedback_grace_s: int =
     await each("graded", ungraded, lambda sid: grade_session(pool, s, sid))
     # Sign-in rows nobody can use any more.
     async with pool.connection() as conn:
-        await conn.execute(
-            "DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days'"
-        )
+        await conn.execute("DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days'")
     return report
 
 

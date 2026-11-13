@@ -18,6 +18,8 @@ export async function api<T = unknown>(
   const { json, headers, ...rest } = init;
   const res = await fetch(`/api${path}`, {
     credentials: "same-origin",
+    // A deadline on every request, so a hung one can't stall a retry or a hang-up.
+    signal: AbortSignal.timeout(20_000),
     ...rest,
     headers: { ...(json !== undefined ? { "content-type": "application/json" } : {}), ...headers },
     body: json !== undefined ? JSON.stringify(json) : rest.body,

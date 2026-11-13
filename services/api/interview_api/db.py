@@ -32,9 +32,9 @@ async def apply_schema(pool: AsyncConnectionPool, *, lock_timeout_s: int = 0) ->
     migration that cannot get it gives up (and can be re-run) instead of queueing and
     blocking every request behind it."""
     async with pool.connection() as conn, conn.transaction():
-        await conn.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK,))
-        if lock_timeout_s:
+        if lock_timeout_s:  # set first, so waiting for the advisory lock times out too
             await conn.execute(f"SET LOCAL lock_timeout = '{int(lock_timeout_s)}s'")
+        await conn.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK,))
         await conn.execute(SCHEMA)
 
 

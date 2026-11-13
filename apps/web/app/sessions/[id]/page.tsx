@@ -71,9 +71,11 @@ export default function SessionPage() {
         const r = await api<Resp>(`/sessions/${id}/feedback`);
         if (stop) return;
         setData(r);
-        const done =
-          r.feedback?.status === "ready" || r.feedback?.status === "failed" || r.session.status === "failed" || !r.provider.transcripts;
-        if (!done && tries++ < 40) setTimeout(poll, 1500);
+        const live = r.session.status === "created" || r.session.status === "active";
+        const graded = r.feedback?.status === "ready" || r.feedback?.status === "failed";
+        const done = !live && (graded || r.session.status === "failed" || !r.provider.transcripts);
+        // Up to 3 minutes: long enough for the server to close a session the page couldn't.
+        if (!done && tries++ < 120) setTimeout(poll, 1500);
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) router.push("/");
         else setError("Could not load this session.");
@@ -196,6 +198,7 @@ export default function SessionPage() {
         </details>
       )}
 
+      {!ended && <p className="small">Finishing your session…</p>}
       {ended && session.status !== "failed" && <RatingForm sessionId={id} initial={data.rating} />}
       <p className="caption center" style={{ marginTop: 20 }}>{DISCLAIMER}</p>
       <p className="center small"><Link href="/interview">Practise again</Link> · <Link href="/prepare">Your details</Link></p>
