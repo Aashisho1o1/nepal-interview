@@ -26,12 +26,14 @@ from .quota import settle_session
 log = logging.getLogger("interview_api.reconcile")
 
 
-async def _mark_vendor_closed(pool, session_id) -> None:
+async def _mark_vendor_closed(pool, session_id, vendor_ref) -> None:
+    # Only for the vendor id that was closed: an older copy of the row without the id
+    # must not mark a call that was stored meanwhile (and may still be running).
     async with pool.connection() as conn:
         await conn.execute(
             "UPDATE interview_sessions SET vendor_closed_at = now() WHERE id=%s "
-            "AND vendor_closed_at IS NULL",
-            (session_id,),
+            "AND vendor_closed_at IS NULL AND vendor_ref IS NOT DISTINCT FROM %s",
+            (session_id, vendor_ref),
         )
 
 
@@ -43,7 +45,7 @@ async def close_vendor(pool, sess, registry) -> bool:
     prov = registry.providers.get(sess.get("provider_id"))
     ok = await prov.close(sess) if prov else True
     if ok:
-        await _mark_vendor_closed(pool, sess["id"])
+        await _mark_vendor_closed(pool, sess["id"], sess.get("vendor_ref"))
     return ok
 
 

@@ -65,7 +65,6 @@ export default function KeyframeStage({ sessionId, launch, onPhase, onClock, onN
         });
         view.current = v;
         await v.connect(); // reports failures through onError
-        if (gone) v.disconnect(); // unmounted while connecting
       } catch (e) {
         if (gone) return;
         cb.current.onNotice(connectFailureNotice(e));
