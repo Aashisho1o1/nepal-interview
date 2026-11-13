@@ -61,7 +61,9 @@ export function trackCall(sessionId: string, cb: RefObject<StageCallbacks>) {
           const r = await post("media_ready", payload);
           if (ended) return;
           if (r.practice_ends_at) cb.current.onClock(r.practice_ends_at * 1000);
-          cb.current.onPhase("listening");
+          // Not "Your turn": the interviewer usually speaks first. Turn-taking comes
+          // from the stage's own events, when the vendor sends them.
+          cb.current.onPhase("in_call");
           if (!r.live) finish("settled_elsewhere");
           return;
         } catch {

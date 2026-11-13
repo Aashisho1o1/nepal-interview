@@ -56,7 +56,7 @@
         "ELEVENLABS_VIDEO_AGENT_ID",
         "ELEVENLABS_API_KEY"
       ],
-      "data_note": "Video call. Your voice and confirmed details are sent to the AI service that runs the interviewer.",
+      "data_note": "Video call. Your voice, first name and confirmed details are sent to the AI service that runs the interviewer.",
       "capabilities": {
         "transcripts": false,
         "student_facts": true,
@@ -73,7 +73,7 @@
       "requires_env": [
         "ELEVENLABS_AGENT_ID"
       ],
-      "data_note": "Audio only. Your voice and confirmed details are sent to the AI service that runs the interviewer.",
+      "data_note": "Audio only. Your voice, first name and confirmed details are sent to the AI service that runs the interviewer.",
       "capabilities": {
         "transcripts": false,
         "student_facts": true,

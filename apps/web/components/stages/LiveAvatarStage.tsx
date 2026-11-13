@@ -36,6 +36,7 @@ export default function LiveAvatarStage({ sessionId, launch, onPhase, onClock, o
         });
         s.on(sdk.AgentEventsEnum.AVATAR_SPEAK_STARTED, () => cb.current.onPhase("speaking"));
         s.on(sdk.AgentEventsEnum.AVATAR_SPEAK_ENDED, () => cb.current.onPhase("listening"));
+        s.on(sdk.AgentEventsEnum.USER_SPEAK_STARTED, () => cb.current.onPhase("listening"));
         s.on(sdk.AgentEventsEnum.SESSION_STOPPED, (e) => call.finish(e.stop_reason === "AGENT_HANG_UP" ? "agent_ended" : "disconnected"));
         s.on(sdk.SessionEvent.SESSION_DISCONNECTED, () => call.finish(call.isConnected() ? "disconnected" : "connect_failed"));
         await s.start();

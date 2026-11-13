@@ -65,6 +65,7 @@ the production database: the live database is named `Postgres`, and `railway.ts`
 `postgres`. It would also repoint variables on `api` and `worker`. Change variables in the
 dashboard until the file matches and a plan shows 0 to destroy.
 
-Edit `railway.ts`, then `railway config plan` and `railway config apply`. A resource
-removed from the file is deleted on apply; the CLI marks it as destructive first.
+Only once a plan shows 0 to destroy: edit `railway.ts`, then `railway config plan` and
+`railway config apply`. A resource removed from the file is deleted on apply; the CLI
+marks it as destructive first.
 Secrets stay in Shared Variables, never in this file.
