@@ -147,14 +147,15 @@ def create_app(
         finally:
             hash_waiting -= 1
 
+    # Added first so it sits inside _no_store, and its 413 replies are also not cached.
+    app.add_middleware(_BodyLimit)
+
     @app.middleware("http")
     async def _no_store(request: Request, call_next):
         response = await call_next(request)
         if request.url.path.startswith("/api/"):  # personal data: never cached
             response.headers.setdefault("Cache-Control", "no-store")
         return response
-
-    app.add_middleware(_BodyLimit)
 
     def origin_guard(request: Request) -> None:
         check_origin(request, s.allowed_origins)
@@ -366,7 +367,9 @@ def create_app(
         await conn.execute(
             "SELECT 1 FROM student_profiles WHERE id=%s FOR NO KEY UPDATE", (student_id,)
         )
-        cur = await conn.execute("SELECT * FROM extracted_facts WHERE student_id=%s", (student_id,))
+        cur = await conn.execute(
+            "SELECT * FROM extracted_facts WHERE student_id=%s ORDER BY ref", (student_id,)
+        )
         rows = await cur.fetchall()
         cur = await conn.execute(
             "SELECT COALESCE(MAX(version),0)+1 AS v FROM profile_snapshots WHERE student_id=%s",
@@ -385,13 +388,20 @@ def create_app(
             for r in rows
         ]
         snap = build_snapshot(facts, version)
-        latest = await _latest_snapshot(conn, student_id)
-        if latest and latest["confirmed_facts_json"]["facts"] == snap["facts"]:
-            return latest  # nothing changed: don't store another copy
         try:
             funding = compute_funding(snap).to_dict()
         except FundingInputError as e:
             funding = {"error": str(e)}
+        latest = await _latest_snapshot(conn, student_id)
+        # The funding rules can change between saves, so compare it as well as the facts.
+        if (
+            latest
+            and latest["confirmed_facts_json"]["facts"] == snap["facts"]
+            and latest["funding_json"] == funding
+        ):
+            return latest  # nothing changed: don't store another copy
+        if version > 1000:
+            raise HTTPException(429, "Too many saves. Try again later.")
         cur = await conn.execute(
             "INSERT INTO profile_snapshots (student_id, version, confirmed_facts_json, "
             "funding_json) VALUES (%s,%s,%s,%s) RETURNING *",

@@ -39,7 +39,9 @@ export function trackCall(sessionId: string, cb: RefObject<StageCallbacks>) {
   const heartbeat = setInterval(async () => {
     if (!connected || ended) return;
     try {
-      if (!(await post("heartbeat")).live) finish("settled_elsewhere");
+      const r = await post("heartbeat");
+      if (!r.live) finish("settled_elsewhere");
+      else if (r.seconds_left != null) cb.current.onClock(performance.now() + r.seconds_left * 1000); // re-sync if the phone slept
     } catch {
       /* transient; the server tolerates missed heartbeats */
     }

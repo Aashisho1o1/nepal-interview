@@ -12,7 +12,7 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
-const OLD_BROWSER = `try{new Function("class A{static{}}")}catch(e){document.addEventListener("DOMContentLoaded",function(){document.body.innerHTML='<p style="padding:24px;font:16px/1.5 sans-serif">This site needs a newer browser. Please update your iPhone to iOS 16.4 or later, or use an Android phone or a computer.</p>'})}`;
+const OLD_BROWSER = `try{new Function("class A{static{}}")}catch(e){if(e instanceof SyntaxError)document.addEventListener("DOMContentLoaded",function(){document.body.innerHTML='<p style="padding:24px;font:16px/1.5 sans-serif">This site needs a newer browser. Please update your iPhone to iOS 16.4 or later, or use an Android phone or a computer.</p>'})}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

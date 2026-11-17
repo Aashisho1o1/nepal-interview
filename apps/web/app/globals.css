@@ -93,7 +93,7 @@ main.narrow { max-width: var(--w-narrow); }
 .btn-secondary:hover:not(:disabled) { border-color: var(--ink); }
 .btn-danger { background: var(--bad); color: #fff; }
 .btn-wrong { border-color: var(--bad); color: var(--bad); }
-.btn-ghost { height: auto; padding: 4px 6px; color: var(--link); background: none; font-weight: 500; }
+.btn-ghost { height: auto; padding: 4px 6px; color: var(--link); background: none; font-size: inherit; font-weight: 500; }
 .btn-ghost:hover { text-decoration: underline; }
 .btn:disabled { background: var(--surface-2); color: var(--faint); border-color: transparent; cursor: not-allowed; }
 .btn-block { width: 100%; }

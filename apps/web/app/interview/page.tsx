@@ -17,6 +17,9 @@ import { DATA_NOTE, DISCLAIMER, micErrorMessage } from "@/lib/copy";
 import { PHASE_TEXT, type Launch, type Phase, type ProviderInfo, type StageProps, type StartResp } from "@/lib/providers";
 
 const KEY_STORE = "ni-start-key";
+// Once a session starts or is ended, no interviewer's saved key may bring an old one back.
+const clearStartKeys = () =>
+  Object.keys(sessionStorage).filter((k) => k.startsWith(KEY_STORE)).forEach((k) => sessionStorage.removeItem(k));
 const END_TIMEOUT_MS = 8_000;
 
 type Live = { id: string; launch: Launch };
@@ -151,7 +154,7 @@ export default function Interview() {
         json: { track: "uk_pre_cas", provider_id: providerId },
         signal: AbortSignal.timeout(45_000), // the server may wait on two vendor calls
       });
-      sessionStorage.removeItem(store);
+      clearStartKeys();
       if (goneRef.current) {
         // Left while it was starting: end it now instead of leaving it to time out.
         navigator.sendBeacon(`/api/sessions/${s.session_id}/end?reason=page_exit`, new Blob([""], { type: "text/plain" }));
@@ -174,6 +177,7 @@ export default function Interview() {
   async function endOther() {
     if (!liveConflict) return;
     await api(`/sessions/${liveConflict}/end`, { method: "POST" }).catch(() => undefined);
+    clearStartKeys();
     setLiveConflict(null);
     setError("");
     setPhase("idle");

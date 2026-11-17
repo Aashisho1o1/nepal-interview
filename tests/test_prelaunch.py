@@ -157,7 +157,16 @@ async def test_a_huge_request_body_is_refused_before_it_is_read_in_full(make_env
     env = await make_env()
     async with env.client() as c:
         r = await c.post("/api/auth/login", content=b'{"email":"' + b"a" * 100_000 + b'"}')
-    assert r.status_code == 413
+        assert r.status_code == 413
+
+        async def chunks():  # streamed, so there is no Content-Length to check up front
+            for _ in range(20):
+                yield b"a" * 8_000
+
+        r = await c.post(
+            "/api/auth/login", content=chunks(), headers={"content-type": "application/json"}
+        )
+    assert r.status_code == 413 and r.headers["cache-control"] == "no-store"
 
 
 async def test_the_clock_reply_gives_seconds_left_so_the_phone_clock_does_not_matter(make_env):
@@ -179,6 +188,7 @@ async def test_typos_from_one_network_do_not_block_a_room_from_a_right_code(make
         s = await login_student(env, f"t{i}@synthetic.test", "T", entitlements={})
         assert (await s.post("/api/promo/redeem", json={"code": "LEEDS2072"})).status_code == 404
     late = await login_student(env, "late@synthetic.test", "L", entitlements={})
+    assert not await env.sql("SELECT 1 FROM entitlements")  # {} means no starting time
     assert (await late.post("/api/promo/redeem", json={"code": "LEEDS2027"})).status_code == 200
 
 
@@ -190,6 +200,15 @@ async def test_saving_unchanged_details_does_not_add_a_snapshot(make_env):
     second = await c.put("/api/profile/details", json=details)
     assert first.status_code == second.status_code == 200
     assert first.json()["version"] == second.json()["version"]
+
+    # New funding rules give the same details a new result, which is saved.
+    await env.sql("UPDATE profile_snapshots SET funding_json='{}'")
+    third = await c.put("/api/profile/details", json=details)
+    assert third.json()["version"] == first.json()["version"] + 1
+
+    await env.sql("UPDATE profile_snapshots SET version=version+998")  # now 999 and 1000
+    r = await c.put("/api/profile/details", json={**details, "savings_gbp": "100"})
+    assert r.status_code == 429
 
 
 async def test_funds_without_costs_are_refused_and_a_paid_deposit_is_on_time(make_env):

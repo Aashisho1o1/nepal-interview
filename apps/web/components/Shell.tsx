@@ -31,6 +31,13 @@ export default function Shell({ step, title, intro, width = "page", me: given, l
     if (given === undefined) api<Me>("/me").then(setFetched).catch(() => setFetched(null));
   }, [given]);
 
+  // After signing out, Back can bring the last page back from the browser's cache: reload it.
+  useEffect(() => {
+    const reload = (e: PageTransitionEvent) => e.persisted && window.location.reload();
+    window.addEventListener("pageshow", reload);
+    return () => window.removeEventListener("pageshow", reload);
+  }, []);
+
   async function signOut() {
     await api("/auth/logout", { method: "POST" }).catch(() => undefined);
     // A full reload on purpose, so nothing from the account stays on screen.

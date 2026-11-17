@@ -39,7 +39,7 @@ async def seed(
             conn,
             uid,
             name,
-            entitlements or SYNTHETIC_ENTITLEMENTS,
+            SYNTHETIC_ENTITLEMENTS if entitlements is None else entitlements,
             "synthetic-test-v1",
             example_facts=True,
         )

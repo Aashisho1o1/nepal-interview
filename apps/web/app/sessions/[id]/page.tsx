@@ -77,8 +77,10 @@ export default function SessionPage() {
         // Up to 3 minutes: long enough for the server to close a session the page couldn't.
         if (!done && tries++ < 120) setTimeout(poll, 1500);
       } catch (e) {
+        if (stop) return;
+        const retry = !(e instanceof ApiError) || e.status >= 500; // dropped, or the server failed
         if (e instanceof ApiError && e.status === 401) router.push("/");
-        else if (tries++ < 120) setTimeout(poll, 3000); // a dropped request: try again
+        else if (retry && tries++ < 120) setTimeout(poll, 3000);
         else setError("Could not load this session.");
       }
     }
