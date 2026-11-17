@@ -14,7 +14,6 @@ import json
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
-from typing import Any
 
 DEFAULT_PRICE_FILE = Path(__file__).resolve().parents[3] / "config" / "prices.json"
 
@@ -23,9 +22,6 @@ DEFAULT_PRICE_FILE = Path(__file__).resolve().parents[3] / "config" / "prices.js
 class PriceTable:
     version: str
     usd_per_unit: dict[str, Decimal]
-    fx_npr_per_usd: Decimal
-    fx_as_of: str
-    raw: dict[str, Any]
 
     def cost_usd_micros(self, meter: str, quantity: Decimal) -> int | None:
         price = self.usd_per_unit.get(meter)
@@ -44,7 +40,4 @@ def load_price_table(path: str | Path | None = None) -> PriceTable:
     return PriceTable(
         version=data["version"],
         usd_per_unit=prices,
-        fx_npr_per_usd=Decimal(str(data["fx"]["npr_per_usd"])),
-        fx_as_of=data["fx"]["as_of"],
-        raw=data,
     )

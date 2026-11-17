@@ -34,12 +34,6 @@ class TrackSpec:
     formats: tuple[SessionFormat, ...]
     notes: tuple[str, ...] = field(default_factory=tuple)
 
-    def format(self, format_id: str) -> SessionFormat:
-        for f in self.formats:
-            if f.id == format_id:
-                return f
-        raise KeyError(format_id)
-
     def format_for(self, modality: str) -> SessionFormat:
         for f in self.formats:
             if f.modality == modality:

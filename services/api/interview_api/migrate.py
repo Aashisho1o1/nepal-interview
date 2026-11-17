@@ -15,12 +15,8 @@ from .db import apply_schema, make_pool
 
 
 async def _main() -> None:
-    pool = make_pool(get_settings().database_url, max_size=1)
-    await pool.open()
-    try:
+    async with make_pool(get_settings().database_url, max_size=1) as pool:
         await apply_schema(pool, lock_timeout_s=5)
-    finally:
-        await pool.close()
     print("Schema is up to date.")
 
 

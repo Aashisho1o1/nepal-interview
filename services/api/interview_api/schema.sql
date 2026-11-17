@@ -210,17 +210,6 @@ CREATE TABLE IF NOT EXISTS promo_redemptions (
 );
 
 -- ---------------------------------------------------------------- migrations
--- Databases created before 2026-11-02 (own LiveKit pipeline). Safe to re-run.
-ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS provider_id TEXT NOT NULL DEFAULT 'unknown';
-ALTER TABLE interview_sessions ALTER COLUMN provider_id DROP DEFAULT;
-ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS vendor_ref TEXT;
-ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS launch_json JSONB;
-ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS launch_claimed_at TIMESTAMPTZ;
-ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS vendor_closed_at TIMESTAMPTZ;
-ALTER TABLE interview_sessions DROP COLUMN IF EXISTS display;
-ALTER TABLE interview_sessions DROP COLUMN IF EXISTS room_name;
-ALTER TABLE interview_sessions DROP COLUMN IF EXISTS fallback_at;
-ALTER TABLE interview_sessions DROP COLUMN IF EXISTS room_closed_at;
 -- Free daily grants and promo grants are keyed by package_version: at most one each.
 CREATE UNIQUE INDEX IF NOT EXISTS entitlements_once
   ON entitlements (student_id, bucket, package_version);

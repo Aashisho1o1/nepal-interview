@@ -27,7 +27,7 @@ import os
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
@@ -70,27 +70,11 @@ class ProviderSpec:
 @dataclass(frozen=True)
 class LaunchContext:
     session_id: str
-    student_id: str
-    student_name: str
     practice_seconds: int
     max_vendor_seconds: int  # vendor-side hard cap: startup + practice + closing grace
     # Short plain-text values for hosted agents that template their own prompt
     # (ElevenLabs {{variables}}). Built from confirmed facts only.
     dynamic_variables: dict[str, str] = field(default_factory=dict)
-
-
-class InterviewProvider(Protocol):
-    spec: ProviderSpec
-    stateful: bool
-    transport: str  # same as the launch kind
-
-    async def launch(self, ctx: LaunchContext) -> dict[str, Any]: ...
-
-    async def close(self, sess: dict[str, Any]) -> bool: ...
-
-    def session_providers(self) -> dict[str, Any]:
-        """Stored on the session row for reporting."""
-        ...
 
 
 def _checked_url(url: str, allowed_hosts: list[str]) -> str:
@@ -138,7 +122,8 @@ def _blank_variables(ctx: LaunchContext) -> dict[str, str]:
 
 class _Provider:
     spec: ProviderSpec
-    transport: str
+    stateful: bool
+    transport: str  # same as the launch kind
 
     def session_providers(self) -> dict[str, Any]:
         """Stored on the session row for reporting."""
@@ -402,24 +387,15 @@ class KeyframeProvider(_Provider):
 
 @dataclass
 class ProviderRegistry:
-    providers: dict[str, InterviewProvider]
+    providers: dict[str, _Provider]
     order: list[str]
     disabled: dict[str, str]  # id -> reason, for operators
 
-    def get(self, provider_id: str) -> InterviewProvider:
+    def get(self, provider_id: str) -> _Provider:
         return self.providers[provider_id]
 
-    def enabled(self) -> list[InterviewProvider]:
+    def enabled(self) -> list[_Provider]:
         return [self.providers[i] for i in self.order if i in self.providers]
-
-    def frame_origins(self) -> list[str]:
-        """Origins the web app must allow microphone/autoplay for (Permissions-Policy)."""
-        out = []
-        for p in self.enabled():
-            if p.transport == "iframe":
-                for h in p.spec.raw.get("allowed_hosts", []):
-                    out.append(f"https://{h}")
-        return sorted(set(out))
 
 
 def load_registry(
@@ -432,7 +408,7 @@ def load_registry(
     env = dict(os.environ if env is None else env)
     data = json.loads(Path(path or settings.providers_file or DEFAULT_PROVIDERS_FILE).read_text())
     only = {x.strip() for x in env.get("ENABLED_PROVIDERS", "").split(",") if x.strip()}
-    providers: dict[str, InterviewProvider] = {}
+    providers: dict[str, _Provider] = {}
     order: list[str] = []
     disabled: dict[str, str] = {}
     for raw in data["providers"]:
@@ -464,7 +440,7 @@ def load_registry(
         )
         try:
             if raw["integration"] == "iframe_embed":
-                prov: InterviewProvider = IframeEmbedProvider(spec, env[raw["url_env"]])
+                prov: _Provider = IframeEmbedProvider(spec, env[raw["url_env"]])
             elif raw["integration"] == "liveavatar_lite":
                 prov = LiveAvatarLiteProvider(
                     spec,

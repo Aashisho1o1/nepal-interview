@@ -126,10 +126,8 @@ async def _main(loop: bool, interval: int) -> None:
     from .providers import load_registry
 
     s = get_settings()
-    pool = make_pool(s.database_url, max_size=4)
-    await pool.open()
     registry = load_registry(s)
-    try:
+    async with make_pool(s.database_url, max_size=4) as pool:
         while True:
             try:
                 report = await reconcile_once(pool, s, registry)
@@ -142,8 +140,6 @@ async def _main(loop: bool, interval: int) -> None:
             if not loop:
                 break
             await asyncio.sleep(interval)
-    finally:
-        await pool.close()
 
 
 if __name__ == "__main__":

@@ -29,8 +29,6 @@ def body(provider_id: str = "voice") -> dict:
 def ctx(**kw) -> LaunchContext:
     base = dict(
         session_id="s1",
-        student_id="u1",
-        student_name="Asha Synthetic",
         practice_seconds=300,
         max_vendor_seconds=340,
         dynamic_variables={"session_id": "s1", "university": "Example"},
@@ -103,7 +101,9 @@ async def test_token_failure_is_a_provider_error(status, payload):
 
 
 async def test_token_failure_settles_the_session_and_the_student_can_retry(make_env):
-    env = await make_env(provider_env=PRIVATE_ENV, provider_http=token_http([], 401, {"detail": "bad key"}))
+    env = await make_env(
+        provider_env=PRIVATE_ENV, provider_http=token_http([], 401, {"detail": "bad key"})
+    )
     c = await ready_student(env)
     r = await c.post("/api/sessions", json=body(VOICE), headers=key())
     assert r.status_code == 502 and r.json()["error"] == "provider_failed"

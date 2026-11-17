@@ -7,8 +7,7 @@ Invariants (tested in tests/test_api.py):
 * Settlement happens once: the session row is locked and a settled session returns
   its stored result.
 * Charged seconds: whole seconds rounded down, from media-ready to the end, capped at
-  the reservation. Startup is never charged to the student. Provider startup costs
-  are still recorded in usage_ledger.
+  the reservation. Startup is never charged to the student.
 * Failed startup (media never ready) is refunded in full; so are very short sessions
   with no student speech when NO_INPUT_REFUND_S is set.
 * A session belongs to one tier: video sessions charge the premium bucket, voice
@@ -80,8 +79,8 @@ async def _lock_entitlement(conn, student_id, bucket: str, need: int):
         reserved = (await cur.fetchone())["r"]
         avail = e["granted_seconds"] - e["consumed_seconds"] - reserved
         if avail >= need:
-            return e, avail
-    return None, 0
+            return e
+    return None
 
 
 async def start_session(
@@ -142,9 +141,7 @@ async def start_session(
                             "and try again later.",
                         )
 
-                    ent, _avail = await _lock_entitlement(
-                        conn, student_id, bucket, practice_seconds
-                    )
+                    ent = await _lock_entitlement(conn, student_id, bucket, practice_seconds)
                     if ent is None:
                         raise QuotaError(
                             402,
@@ -229,7 +226,7 @@ async def settle_session(
         if sess is None:
             raise QuotaError(404, "not_found", "session not found")
         if sess["status"] not in LIVE:
-            return {**sess, "already_settled": True}
+            return sess
 
         now = datetime.now(UTC)
         ready = sess["media_ready_at"]
@@ -281,29 +278,16 @@ async def settle_session(
             (status, end, reason, premium, basic, waived, session_id),
         )
         out = await cur.fetchone()
+        detail = {
+            "reason": reason,
+            "note": note,
+            "premium": premium,
+            "basic": basic,
+            "waived": waived,
+        }
         await conn.execute(
             "INSERT INTO session_events (session_id, kind, payload, source) VALUES (%s,%s,%s,%s)",
-            (
-                session_id,
-                "settled",
-                Jsonb(
-                    {
-                        "reason": reason,
-                        "note": note,
-                        "premium": premium,
-                        "basic": basic,
-                        "waived": waived,
-                    }
-                ),
-                "api",
-            ),
+            (session_id, "settled", Jsonb(detail), "api"),
         )
-        await audit(
-            conn,
-            "system",
-            "session.settle",
-            "interview_session",
-            str(session_id),
-            {"reason": reason, "premium": premium, "basic": basic, "waived": waived, "note": note},
-        )
-        return {**out, "already_settled": False, "settlement_note": note}
+        await audit(conn, "system", "session.settle", "interview_session", str(session_id), detail)
+        return out

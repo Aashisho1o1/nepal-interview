@@ -122,9 +122,8 @@ def key() -> dict:
     return {"idempotency-key": uuid.uuid4().hex}
 
 
-def body(provider_id: str = VIDEO, track: str = TRACK, format_id: str | None = None) -> dict:
-    out = {"track": track, "provider_id": provider_id}
-    return {**out, "format_id": format_id} if format_id else out
+def body(provider_id: str = VIDEO, track: str = TRACK) -> dict:
+    return {"track": track, "provider_id": provider_id}
 
 
 async def start(c, provider_id: str = VIDEO, headers=None, **kw):

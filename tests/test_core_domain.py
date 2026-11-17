@@ -257,9 +257,6 @@ def test_price_table_prices_known_meters_and_leaves_others_unpriced():
     table = PriceTable(
         version="t",
         usd_per_unit={"elevenlabs.agent_seconds": Decimal("0.0015")},
-        fx_npr_per_usd=Decimal("160"),
-        fx_as_of="test",
-        raw={},
     )
     assert table.cost_usd_micros("elevenlabs.agent_seconds", Decimal(60)) == 90_000
     assert table.cost_usd_micros("liveavatar.session_seconds", Decimal(60)) is None

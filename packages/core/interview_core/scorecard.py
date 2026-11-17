@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from . import RUBRIC_VERSION, SCORECARD_SCHEMA_VERSION
+from . import RUBRIC_VERSION
 
 Category = Literal[
     "question_relevance",
@@ -148,8 +148,6 @@ def validate_scorecard(raw: object, ctx: ValidationContext) -> Scorecard:
         errors.append("session_id does not match the session being graded")
     if card.track != ctx.track:
         errors.append("track does not match the session track")
-    if card.schema_version != SCORECARD_SCHEMA_VERSION:
-        errors.append("unsupported schema_version")
     if card.rubric_version != RUBRIC_VERSION:
         errors.append("unexpected rubric_version")
     if card.human_review_status != "not_reviewed":

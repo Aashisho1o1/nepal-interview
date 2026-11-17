@@ -268,7 +268,6 @@ def create_app(
         return {
             "email": st["email"],
             "display_name": st["display_name"],
-            "is_synthetic": st["is_synthetic"],
             "balances": bal,
             # Length of one session per interviewer type, to show sessions left.
             "session_seconds": {"avatar": plans.VIDEO_SECONDS, "voice": plans.VOICE_SECONDS},
@@ -396,7 +395,6 @@ def create_app(
     class StartBody(Strict):
         track: str
         provider_id: str = Field(max_length=64)
-        format_id: str | None = None  # optional: each interviewer type has one format
 
     @app.post("/api/sessions", dependencies=[Depends(origin_guard)])
     async def start(body: StartBody, request: Request, st=Depends(current_student)):
@@ -418,11 +416,9 @@ def create_app(
             )
         try:
             track = get_track(body.track)
-            fmt = track.format(body.format_id) if body.format_id else track.format_for(mode)
+            fmt = track.format_for(mode)
         except KeyError as e:
             raise HTTPException(422, "unknown track or format") from e
-        if fmt.modality != mode:
-            raise HTTPException(422, "that format is for the other interviewer")
         key = request.headers.get("idempotency-key", "")
         # No details needed: a student who skipped the form practises on an empty
         # snapshot and the interviewer asks about what it doesn't know.
@@ -459,8 +455,6 @@ def create_app(
         startup = s.startup_budget_avatar_s if mode == "avatar" else s.startup_budget_voice_s
         ctx = LaunchContext(
             session_id=str(sess["id"]),
-            student_id=str(st["student_id"]),
-            student_name=st["display_name"],
             practice_seconds=sess["practice_seconds"],
             max_vendor_seconds=startup + sess["practice_seconds"] + s.closing_grace_s,
             dynamic_variables=build_dynamic_variables(
@@ -484,16 +478,14 @@ def create_app(
                 "The interviewer could not start. Nothing was charged; please try again.",
             ) from e
         launch = {k: v for k, v in launch.items() if k != "vendor_ref"}
-        out = {
+        return {
             "session_id": str(sess["id"]),
             "created": res.created,
             "launch": launch,
             "mode": sess["mode"],
             "practice_seconds": sess["practice_seconds"],
-            "hard_deadline_at": sess["hard_deadline_at"].isoformat(),
             "disclosure": fmt.disclosure,
         }
-        return out
 
     async def _launch_once(prov, sess, ctx: LaunchContext) -> dict:
         """Create the vendor conversation exactly once per session, even under
@@ -592,7 +584,6 @@ def create_app(
             "deadline",
             "page_exit",
             "connect_failed",
-            "avatar_lost",
             "settled_elsewhere",
             "disconnected",
             "agent_ended",
@@ -745,7 +736,7 @@ def create_app(
         }
 
     class ClientEventBody(Strict):
-        kind: Literal["media_ready", "heartbeat", "metric", "media_error"]
+        kind: Literal["media_ready", "heartbeat", "metric"]
         payload: dict = Field(default_factory=dict)
 
     @app.post("/api/sessions/{session_id}/client-events", dependencies=[Depends(origin_guard)])

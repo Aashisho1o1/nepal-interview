@@ -124,8 +124,7 @@ async def current_student(request: Request) -> dict:
     pool = request.app.state.pool
     async with pool.connection() as conn:
         cur = await conn.execute(
-            """SELECT u.id AS user_id, u.email, u.role, p.id AS student_id, p.display_name,
-                      p.is_synthetic
+            """SELECT u.id AS user_id, u.email, u.role, p.id AS student_id, p.display_name
                FROM auth_sessions s JOIN users u ON u.id = s.user_id
                LEFT JOIN student_profiles p ON p.user_id = u.id
                WHERE s.token_hash = %s AND s.revoked_at IS NULL AND s.expires_at > now()""",

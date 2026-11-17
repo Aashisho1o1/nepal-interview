@@ -48,11 +48,9 @@ async def seed(
 async def _main() -> None:
     s = get_settings()
     pw = os.getenv("SEED_PASSWORD") or secrets.token_urlsafe(12)
-    pool = make_pool(s.database_url, max_size=2)
-    await pool.open()
-    await apply_schema(pool)
-    sid = await seed(pool, pw)
-    await pool.close()
+    async with make_pool(s.database_url, max_size=2) as pool:
+        await apply_schema(pool)
+        sid = await seed(pool, pw)
     print(f"Seeded synthetic student {SYNTHETIC_STUDENT_EMAIL} (profile {sid}).")
     if not os.getenv("SEED_PASSWORD"):
         print(f"Generated password: {pw}")

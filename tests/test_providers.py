@@ -35,7 +35,6 @@ def test_registry_offers_only_configured_valid_providers():
     assert "ELEVENLABS_AGENT_ID" in none.disabled[VOICE]
     both = load_registry(s, env=HERO_ENV)
     assert both.order == [VIDEO, VOICE]
-    assert both.frame_origins() == ["https://embed.liveavatar.com"]
     bad = load_registry(s, env={**HERO_ENV, "LIVEAVATAR_EMBED_URL": "https://evil.example/x"})
     assert "allowed_hosts" in bad.disabled[VIDEO] and bad.order == [VOICE]
     plain = load_registry(

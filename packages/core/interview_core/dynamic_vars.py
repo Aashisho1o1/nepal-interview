@@ -14,10 +14,7 @@ from typing import Any
 from .facts import first_value
 from .funding import FundingSummary, describe_for_interviewer
 
-# LiveAvatar's documented limits (50 variables, keys <= 64, values <= 1000 chars);
-# ElevenLabs accepts the same shape. Truncate defensively for both.
-MAX_VARS = 50
-MAX_KEY = 64
+# LiveAvatar's documented value limit (1000 chars); ElevenLabs accepts the same.
 MAX_VALUE = 1000
 
 NOT_PROVIDED = "not provided"
@@ -58,7 +55,6 @@ def build_dynamic_variables(
     facts: dict[str, Any],
     funding: FundingSummary | None,
     practice_seconds: int,
-    question_count: int = 3,
 ) -> dict[str, str]:
     minutes = max(1, round(practice_seconds / 60))
     out = {
@@ -78,9 +74,6 @@ def build_dynamic_variables(
         "academic_summary": _text(first_value(facts, "academic.history")),
         "accommodation_plan": _text(first_value(facts, "uk.accommodation_plan")),
         "english_test": _text(first_value(facts, "academic.english_test")),
-        "interview_format": f"{question_count} questions, {minutes} minutes",
+        "interview_format": f"3 questions, {minutes} minutes",
     }
-    clean: dict[str, str] = {}
-    for k, v in list(out.items())[:MAX_VARS]:
-        clean[k[:MAX_KEY]] = v[:MAX_VALUE]
-    return clean
+    return {k: v[:MAX_VALUE] for k, v in out.items()}
