@@ -11,7 +11,7 @@ import DemoClip from "@/components/DemoClip";
 import Shell from "@/components/Shell";
 import Waitlist from "@/components/Waitlist";
 import { api, ApiError, Me, SessionSummary } from "@/lib/api";
-import { DISCLAIMER, END_REASON, STATUS } from "@/lib/copy";
+import { DISCLAIMER, STATUS } from "@/lib/copy";
 
 type Home = { me: Me; last: SessionSummary | null };
 
@@ -59,12 +59,8 @@ export default function HomePage() {
     setBusy(true);
     setError("");
     try {
-      if (signup) {
-        await api("/auth/signup", { method: "POST", json: { name, email, password } });
-        router.push("/interview");
-        return;
-      }
-      await api("/auth/login", { method: "POST", json: { email, password } });
+      if (signup) await api("/auth/signup", { method: "POST", json: { name, email, password } });
+      else await api("/auth/login", { method: "POST", json: { email, password } });
       router.push("/interview");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : signup ? "Could not create your account." : "Could not sign in.");
@@ -87,7 +83,7 @@ export default function HomePage() {
   }
 
   return (
-    <Shell width="wide" me={home === undefined ? undefined : (home?.me ?? null)}>
+    <Shell width="wide" me={home?.me ?? null}>
       <section className="hero">
         <span className="chip chip--outline">Visa Interview Practice</span>
         <h1 className="display">Don&apos;t freeze when your UK university asks “Why this course?”</h1>
@@ -102,7 +98,7 @@ export default function HomePage() {
         {home?.last && (
           <p className="small" style={{ margin: "12px 0 0" }}>
             Last session: <span className="nums">{new Date(home.last.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span> ·{" "}
-            {home.last.mode === "avatar" ? "Video" : "Voice"} · {home.last.end_reason === "deadline" ? "Time ran out" : STATUS[home.last.status] ?? END_REASON[home.last.end_reason ?? ""] ?? "Ended"}{" "}
+            {home.last.mode === "avatar" ? "Video" : "Voice"} · {home.last.end_reason === "deadline" ? "Time ran out" : STATUS[home.last.status]}{" "}
             <Link href={`/sessions/${home.last.id}`}>See session →</Link>
           </p>
         )}

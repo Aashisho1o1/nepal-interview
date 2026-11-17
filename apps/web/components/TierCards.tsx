@@ -8,25 +8,25 @@ import { TIERS } from "@/lib/copy";
 export type TierOption = {
   id: string;
   modality: "avatar" | "voice";
-  label?: string; // tells apart two interviewers of one kind
+  label: string;
   left?: string | null; // e.g. "1 session left"
   disabled?: boolean;
   note?: string; // why it's disabled
 };
 
-type Props = { options: TierOption[]; value: string | null; onChange: (id: string) => void; name?: string };
+type Props = { options: TierOption[]; value: string | null; onChange: (id: string) => void };
 
-export default function TierCards({ options, value, onChange, name = "tier" }: Props) {
+export default function TierCards({ options, value, onChange }: Props) {
   return (
     <div className="tiers" role="radiogroup" aria-label="Interviewer">
       {options.map((o) => {
         const t = TIERS[o.modality];
         return (
           <label key={o.id} className="tier" data-selected={value === o.id} aria-disabled={o.disabled || undefined}>
-            <input type="radio" name={name} value={o.id} checked={value === o.id} disabled={o.disabled} onChange={() => onChange(o.id)} />
+            <input type="radio" name="tier" value={o.id} checked={value === o.id} disabled={o.disabled} onChange={() => onChange(o.id)} />
             <span className="dot" aria-hidden="true" />
             {o.modality === "avatar" ? <VideoIcon /> : <VoiceIcon />}
-            <span className="tier-title">{o.label ?? t.title}</span>
+            <span className="tier-title">{o.label}</span>
             <span className="small">{t.desc}</span>
             <span className="chips">
               <span className="chip chip--outline">{t.chip}</span>

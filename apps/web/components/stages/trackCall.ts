@@ -1,4 +1,4 @@
-// What a video stage reports to the server, whichever vendor runs the call: the clock
+// What a stage reports to the server, whichever vendor runs the call: the clock
 // start, heartbeats and the one way out. A paid call must never run without the clock.
 
 import type { RefObject } from "react";
@@ -50,6 +50,8 @@ export function trackCall(sessionId: string, cb: RefObject<StageCallbacks>) {
   return {
     isConnected: () => connected,
     finish,
+    // Stored for review only, so a lost one doesn't matter.
+    metric: (payload: Record<string, unknown>) => void post("metric", payload).catch(() => undefined),
     // The call is usable: start the server's clock, once. If the server can't be told,
     // end the call (the session is refunded) rather than let it run uncounted.
     async ready(trigger: string) {

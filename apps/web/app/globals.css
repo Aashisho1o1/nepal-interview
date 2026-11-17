@@ -4,7 +4,6 @@
   --bg: #ffffff;
   --surface-2: #f5f5f7;
   --ink: #0b0b0f;
-  --ink-2: #26262b;
   --muted: #6e6e73;
   --faint: #8e8e93;
   --line: #e5e5ea;
@@ -12,14 +11,11 @@
   --brand: #e4573d;
   --action: #cf3f25;
   --action-hover: #b53520;
-  --sun: #ffc94d;
   --link: #0066cc;
   --good: #17794f;
-  --good-soft: #e4f5ec;
   --warn-ink: #8a5a00;
   --warn-soft: #fff3d6;
   --bad: #b3261e;
-  --bad-soft: #fbeae9;
   --r: 8px;
   --r-lg: 16px;
   --pill: 999px;
@@ -92,7 +88,6 @@ main.narrow { max-width: var(--w-narrow); }
 .btn-secondary { border-color: var(--line-strong); }
 .btn-secondary:hover:not(:disabled) { border-color: var(--ink); }
 .btn-danger { background: var(--bad); color: #fff; }
-.btn-wrong { border-color: var(--bad); color: var(--bad); }
 .btn-ghost { height: auto; padding: 4px 6px; color: var(--link); background: none; font-size: inherit; font-weight: 500; }
 .btn-ghost:hover { text-decoration: underline; }
 .btn:disabled { background: var(--surface-2); color: var(--faint); border-color: transparent; cursor: not-allowed; }
@@ -137,9 +132,8 @@ details > *:not(summary) { margin-top: 10px; }
 .tier-title { display: block; font-size: 1.125rem; font-weight: 600; margin-bottom: 4px; }
 .tier .small { display: block; margin-bottom: 12px; }
 
-/* ---------- facts ---------- */
+/* ---------- quotes, tables, sticky bar ---------- */
 .quote { background: var(--surface-2); border-radius: var(--r); padding: 10px 12px; font-size: 15px; line-height: 1.5; margin: 8px 0 14px; }
-.quote a { color: var(--link); }
 .sticky-bar { position: sticky; bottom: 0; margin: 20px calc(-1 * var(--pad)) 0; padding: 12px var(--pad) calc(12px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); }
 table { width: 100%; border-collapse: collapse; font-size: 15px; }
 td { padding: 10px 0; border-top: 1px solid var(--line); vertical-align: top; }
@@ -200,8 +194,6 @@ td:last-child { text-align: right; padding-left: 12px; font-variant-numeric: tab
 
 /* "Have a code?" */
 .code-box { margin: 16px 0 0; }
-.code-box label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
-.code-box .btn-row { flex-wrap: nowrap; }
 .code-box input { flex: 1; min-width: 0; }
 .code-box p { margin: 8px 0 0; }
 
@@ -216,7 +208,6 @@ td:last-child { text-align: right; padding-left: 12px; font-variant-numeric: tab
 /* Recorded demo: one box for both clips, so switching doesn't move the page */
 .clip { margin-top: 28px; }
 .clip video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: var(--surface-2); border-radius: var(--r-lg); margin: 12px 0 8px; }
-.clip p { margin: 0 0 12px; }
 .clip video + p { margin-bottom: 6px; }
 
 /* Privacy and terms */

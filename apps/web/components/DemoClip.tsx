@@ -6,15 +6,14 @@
 import { useState } from "react";
 
 const CLIPS = {
-  video: { label: "Video call", name: "video" },
-  voice: { label: "Voice call", name: "voice" },
+  video: "Video call",
+  voice: "Voice call",
 } as const;
 type Mode = keyof typeof CLIPS;
 
 export default function DemoClip({ onTry }: { onTry: () => void }) {
   const [mode, setMode] = useState<Mode>("video");
   const [ended, setEnded] = useState(false);
-  const { name } = CLIPS[mode];
 
   return (
     <div className="clip">
@@ -31,14 +30,14 @@ export default function DemoClip({ onTry }: { onTry: () => void }) {
               setEnded(false);
             }}
           >
-            {CLIPS[m].label}
+            {CLIPS[m]}
           </button>
         ))}
       </div>
       {/* key: a new element per clip, so switching stops the other one. */}
-      <video key={mode} controls playsInline preload="none" poster={`/demo/${name}-poster-v1.jpg`} onEnded={() => setEnded(true)}>
-        <source src={`/demo/${name}-call-v1.mp4`} type="video/mp4" />
-        <track default kind="captions" srcLang="en" label="English" src={`/demo/${name}-call-v1.vtt`} />
+      <video key={mode} controls playsInline preload="none" poster={`/demo/${mode}-poster-v1.jpg`} onEnded={() => setEnded(true)}>
+        <source src={`/demo/${mode}-call-v1.mp4`} type="video/mp4" />
+        <track default kind="captions" srcLang="en" label="English" src={`/demo/${mode}-call-v1.vtt`} />
       </video>
       <p className="caption">Recorded demo. Fictional AI interviewer, not UKVI or a university.</p>
       {ended && (

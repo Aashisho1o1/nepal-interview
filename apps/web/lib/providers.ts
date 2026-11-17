@@ -70,16 +70,13 @@ export type Phase =
   | "completed"
   | "error";
 
-export const PHASE_TEXT: Record<Phase, string> = {
-  idle: "",
-  starting: "Reserving your session…",
+// Shown only while a call is on screen, so the other phases need no text.
+export const PHASE_TEXT: Partial<Record<Phase, string>> = {
   connecting: "Connecting…",
   waiting_start: "Tap the interviewer window to begin",
   in_call: "Interview in progress",
   listening: "Your turn. Speak now.",
   speaking: "Interviewer speaking…",
-  completed: "Session complete",
-  error: "",
 };
 
 // Every stage gets the same callbacks, so the page never needs to know the vendor.

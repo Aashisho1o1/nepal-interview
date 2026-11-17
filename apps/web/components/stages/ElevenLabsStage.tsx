@@ -2,19 +2,14 @@
 
 // ElevenLabs agent, run in the browser with the ElevenLabs SDK (WebRTC). The agent's
 // prompt, voice and turn-taking live in the ElevenLabs dashboard; we pass this
-// student's confirmed facts as dynamic variables. Like the iframe stage, this stage
-// reports the lifecycle the server needs (clock start on connect, heartbeats), and the
-// page ends the call at the server-set deadline by unmounting it.
+// student's confirmed facts as dynamic variables. trackCall reports the clock start
+// and heartbeats; the page ends the call at the server-set deadline by unmounting it.
 
 import { Conversation } from "@elevenlabs/react";
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
 import type { ElevenLabsLaunch, StageProps } from "@/lib/providers";
+import { connectFailureNotice, trackCall } from "./trackCall";
 
-const HEARTBEAT_MS = 15_000;
-const CLOCK_RETRY_MS = 2_000;
-
-type EventReply = { live: boolean; seconds_left: number | null };
 type Session = Awaited<ReturnType<typeof Conversation.startSession>>;
 type Mode = "connecting" | "listening" | "speaking";
 
@@ -27,46 +22,18 @@ export default function ElevenLabsStage({ sessionId, launch, onPhase, onClock, o
   });
 
   useEffect(() => {
+    const call = trackCall(sessionId, cb);
     let conv: Session | null = null;
-    let closing = false; // we are ending it (unmount): ignore the resulting disconnect
-    let connected = false;
-    const mountedAt = performance.now();
-
-    const post = (kind: string, payload: Record<string, unknown> = {}) =>
-      api<EventReply>(`/sessions/${sessionId}/client-events`, { method: "POST", json: { kind, payload } });
-
-    const finish = (reason: string) => {
-      if (closing) return;
-      closing = true;
-      cb.current.onEnded(reason);
-    };
+    let gone = false;
 
     async function begin() {
       cb.current.onPhase("connecting");
       const base = {
         connectionType: "webrtc" as const,
         dynamicVariables: launch.dynamic_variables,
-        onConnect: async () => {
-          connected = true;
+        onConnect: () => {
           setMode("listening");
-          // Start the server's clock. If the server can't be told, end the call (the
-          // session is refunded) rather than let it run uncounted.
-          const payload = { trigger: "call_connected", ready_ms: Math.round(performance.now() - mountedAt) };
-          for (const wait of [0, CLOCK_RETRY_MS]) {
-            await new Promise((resolve) => setTimeout(resolve, wait));
-            if (closing) return;
-            try {
-              const r = await post("media_ready", payload);
-              if (closing) return;
-              if (r.seconds_left != null) cb.current.onClock(performance.now() + r.seconds_left * 1000);
-              cb.current.onPhase("listening");
-              if (!r.live) finish("settled_elsewhere");
-              return;
-            } catch {
-              /* try once more */
-            }
-          }
-          finish("connect_failed");
+          void call.ready("call_connected");
         },
         onModeChange: ({ mode: m }: { mode: "speaking" | "listening" }) => {
           setMode(m);
@@ -76,9 +43,7 @@ export default function ElevenLabsStage({ sessionId, launch, onPhase, onClock, o
           cb.current.onNotice("The interviewer had a problem. If the call stops, please try again.");
         },
         onDisconnect: (d: { reason: "error" | "agent" | "user" }) => {
-          if (closing) return;
-          if (d.reason === "agent") return finish("agent_ended");
-          finish(connected ? "disconnected" : "connect_failed");
+          call.finish(d.reason === "agent" ? "agent_ended" : call.isConnected() ? "disconnected" : "connect_failed");
         },
       };
       try {
@@ -86,33 +51,20 @@ export default function ElevenLabsStage({ sessionId, launch, onPhase, onClock, o
           ? Conversation.startSession({ ...base, conversationToken: launch.conversation_token })
           : Conversation.startSession({ ...base, agentId: launch.agent_id ?? "" });
         conv = await started;
-        if (closing) await conv.endSession(); // unmounted while connecting
+        if (gone) await conv.endSession(); // unmounted while connecting
       } catch (e) {
-        const blocked = e instanceof Error && e.name === "NotAllowedError";
-        cb.current.onNotice(blocked ? "Allow the microphone to practise." : "Could not connect to the interviewer.");
-        finish("connect_failed");
+        if (gone) return;
+        cb.current.onNotice(connectFailureNotice(e));
+        call.finish("connect_failed");
       }
     }
 
-    // Deferred so React's dev-mode double mount (mount, unmount, mount) never starts two
-    // calls: the first mount's timer is cleared before it fires.
+    // Deferred so React's dev-mode double mount never starts two calls.
     const startTimer = setTimeout(() => void begin(), 0);
-
-    const heartbeat = setInterval(async () => {
-      if (!connected || closing) return;
-      try {
-        const r = await post("heartbeat");
-        if (!r.live) finish("settled_elsewhere");
-        else if (r.seconds_left != null) cb.current.onClock(performance.now() + r.seconds_left * 1000); // re-sync if the phone slept
-      } catch {
-        /* transient; the server tolerates missed heartbeats */
-      }
-    }, HEARTBEAT_MS);
-
     return () => {
-      closing = true;
+      gone = true;
       clearTimeout(startTimer);
-      clearInterval(heartbeat);
+      call.close();
       void conv?.endSession().catch(() => undefined);
     };
     // The launch for a session never changes; run once per mounted call.

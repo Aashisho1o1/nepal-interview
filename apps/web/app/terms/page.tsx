@@ -62,7 +62,7 @@ export default function Terms() {
         <p>If we change these terms, we&apos;ll update this page and its date. Using the service after that means you accept the new terms.</p>
 
         <h2>Contact</h2>
-        <p>{CONTACT_EMAIL || "Contact email to be added."}</p>
+        <p>{CONTACT_EMAIL}</p>
       </div>
     </Shell>
   );

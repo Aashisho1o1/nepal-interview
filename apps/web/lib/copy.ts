@@ -5,7 +5,7 @@ export const DISCLAIMER =
 // Follows each interviewer's own note about what it receives.
 export const DATA_NOTE = "Our small team reads sessions and ratings to improve the practice.";
 
-// Shown on the privacy and terms pages. Set before going public.
+// Shown on the privacy and terms pages.
 export const CONTACT_EMAIL = "aashishsunar.01@gmail.com";
 
 // Google Form for the paid-version waiting list. Empty = the button shows "opening soon".
@@ -13,12 +13,10 @@ export const WAITLIST_URL = "https://forms.gle/U4SiZez78g8QS4Fu5";
 
 export const TIERS = {
   avatar: {
-    title: "Video interviewer",
     desc: "See your interviewer while you talk. Your camera stays off.",
     chip: "Best on Wi-Fi",
   },
   voice: {
-    title: "Voice only",
     desc: "Just talk, no camera. Uses any details you added.",
     chip: "Audio only",
   },

@@ -75,7 +75,7 @@ export default function Privacy() {
         <p>If we change this policy, we&apos;ll update this page and its date.</p>
 
         <h2>Contact</h2>
-        <p>{CONTACT_EMAIL || "Contact email to be added."}</p>
+        <p>{CONTACT_EMAIL}</p>
       </div>
     </Shell>
   );
