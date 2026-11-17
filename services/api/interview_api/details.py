@@ -132,10 +132,17 @@ def to_facts(d: Details) -> list[tuple[str, str, Any, str]]:
         v = _clean(getattr(d, key)).replace(",", "")
         if not v:
             continue
-        if not _MONEY.match(v) or float(v) <= 0:
+        if not _MONEY.match(v):
             raise HTTPException(422, "Enter amounts as numbers, for example 18500.")
+        if float(v) == 0:
+            continue  # "0" means none, like leaving it blank
         amount = f"{float(v):.2f}"
         out.append((ref, field, build(amount), amount))
+    fields = {f for _, f, _, _ in out}
+    if "funding.costs" not in fields and fields & {"funding.funds", "funding.scholarships"}:
+        raise HTTPException(
+            422, "Add your tuition fee or living costs so your funding can be added up."
+        )
     month = _clean(d.start_month)
     if month:
         if not _MONTH.match(month):

@@ -8,7 +8,7 @@ import type { Launch, StageProps } from "@/lib/providers";
 const HEARTBEAT_MS = 15_000;
 const CLOCK_RETRY_MS = 2_000;
 
-type EventReply = { live: boolean; practice_ends_at: number | null };
+type EventReply = { live: boolean; seconds_left: number | null };
 export type StageCallbacks = Pick<StageProps<Launch>, "onPhase" | "onClock" | "onNotice" | "onEnded">;
 
 // Throws NotAllowedError if the student refuses. Asked before the vendor session starts,
@@ -60,7 +60,7 @@ export function trackCall(sessionId: string, cb: RefObject<StageCallbacks>) {
         try {
           const r = await post("media_ready", payload);
           if (ended) return;
-          if (r.practice_ends_at) cb.current.onClock(r.practice_ends_at * 1000);
+          if (r.seconds_left != null) cb.current.onClock(performance.now() + r.seconds_left * 1000);
           // Not "Your turn": the interviewer usually speaks first. Turn-taking comes
           // from the stage's own events, when the vendor sends them.
           cb.current.onPhase("in_call");

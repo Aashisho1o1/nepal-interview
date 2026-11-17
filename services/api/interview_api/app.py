@@ -58,6 +58,33 @@ class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class _BodyLimit:
+    """Refuses request bodies over `limit` bytes, counted as they arrive, so one huge
+    upload can't fill the API's memory. The site's real requests are a few KB."""
+
+    def __init__(self, app, limit: int = 64_000):
+        self.app, self.limit = app, limit
+
+    async def __call__(self, scope, receive, send):
+        size = dict(scope.get("headers") or []).get(b"content-length", b"")
+        if scope["type"] == "http" and size.isdigit() and int(size) > self.limit:
+            await JSONResponse({"detail": "Request too large."}, status_code=413)(
+                scope, receive, send
+            )
+            return
+        seen = 0
+
+        async def counted():
+            nonlocal seen
+            message = await receive()
+            seen += len(message.get("body", b""))
+            if seen > self.limit:
+                raise HTTPException(413, "Request too large.")
+            return message
+
+        await self.app(scope, counted if scope["type"] == "http" else receive, send)
+
+
 def create_app(
     settings: Settings | None = None,
     pool=None,
@@ -72,7 +99,8 @@ def create_app(
         app.state.pool = pool or make_pool(s.database_url)
         await app.state.pool.open()
         if s.apply_schema_on_start:
-            await apply_schema(app.state.pool)
+            # Give up rather than queue every request behind an exclusive table lock.
+            await apply_schema(app.state.pool, lock_timeout_s=5)
         app.state.providers = load_registry(s, env=provider_env, http=provider_http)
         yield
         if pool is None:
@@ -92,8 +120,10 @@ def create_app(
     app.state.signup_tries = RateLimiter(
         max_hits=max(20, 4 * s.signups_per_network_per_hour), window_s=3600
     )
-    # Wrong promo codes: per student and per network, so codes can't be guessed.
+    # Wrong promo codes, so codes can't be guessed: 5 per student, and a looser limit per
+    # network, so a room's typos don't lock everyone on its Wi-Fi out.
     app.state.code_tries = RateLimiter(max_hits=5, window_s=3600)
+    app.state.code_tries_ip = RateLimiter(max_hits=50, window_s=3600)
 
     @app.exception_handler(QuotaError)
     async def _quota_err(_req, e: QuotaError):
@@ -123,6 +153,8 @@ def create_app(
         if request.url.path.startswith("/api/"):  # personal data: never cached
             response.headers.setdefault("Cache-Control", "no-store")
         return response
+
+    app.add_middleware(_BodyLimit)
 
     def origin_guard(request: Request) -> None:
         check_origin(request, s.allowed_origins)
@@ -250,13 +282,11 @@ def create_app(
 
     @app.post("/api/promo/redeem", dependencies=[Depends(origin_guard)])
     async def redeem_code(body: CodeBody, request: Request, st=Depends(current_student)):
-        keys = (f"student:{st['student_id']}", f"ip:{client_ip(request)}")
-        if any(app.state.code_tries.blocked(k) for k in keys):
+        student, network = f"student:{st['student_id']}", f"ip:{client_ip(request)}"
+        if app.state.code_tries.blocked(student) or app.state.code_tries_ip.blocked(network):
             raise HTTPException(429, "Too many tries. Wait an hour and try again.")
         # The student is counted before any await, so one account's parallel guesses can't
-        # all pass; the network only for a wrong code, so a room redeeming a right code
-        # together is never blocked.
-        student, network = keys
+        # all pass; the network only for a wrong code.
         app.state.code_tries.hit(student)
         try:
             async with app.state.pool.connection() as conn, conn.transaction():
@@ -266,7 +296,7 @@ def create_app(
                 )
         except HTTPException as e:
             if e.status_code == 404:  # only wrong codes count as guesses
-                app.state.code_tries.hit(network)
+                app.state.code_tries_ip.hit(network)
                 raise
             app.state.code_tries.undo(student)
             raise
@@ -355,6 +385,9 @@ def create_app(
             for r in rows
         ]
         snap = build_snapshot(facts, version)
+        latest = await _latest_snapshot(conn, student_id)
+        if latest and latest["confirmed_facts_json"]["facts"] == snap["facts"]:
+            return latest  # nothing changed: don't store another copy
         try:
             funding = compute_funding(snap).to_dict()
         except FundingInputError as e:
@@ -774,6 +807,10 @@ def create_app(
             "status": sess["status"],
             "live": sess["status"] in ("created", "active"),
             "practice_ends_at": sess["practice_ends_at"].timestamp()
+            if sess["practice_ends_at"]
+            else None,
+            # Relative, so a phone whose clock is wrong still ends on time.
+            "seconds_left": max(0.0, (sess["practice_ends_at"] - datetime.now(UTC)).total_seconds())
             if sess["practice_ends_at"]
             else None,
         }

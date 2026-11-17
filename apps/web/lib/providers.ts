@@ -87,7 +87,7 @@ export type StageProps<L extends Launch> = {
   sessionId: string;
   launch: L;
   onPhase: (p: Phase) => void;
-  onClock: (practiceEndsAtMs: number) => void;
+  onClock: (endsAt: number) => void; // a performance.now() time, immune to the phone's clock
   onNotice: (message: string) => void;
   onEnded: (reason: string) => void; // the media ended on its own (agent/vendor/network)
 };

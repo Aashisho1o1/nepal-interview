@@ -14,7 +14,7 @@ const CLOCK_RETRY_MS = 2_000;
 const LOAD_WARN_MS = 25_000;
 const MAX_MESSAGE_TYPES = 20;
 
-type EventReply = { live: boolean; practice_ends_at: number | null };
+type EventReply = { live: boolean; seconds_left: number | null };
 
 export default function IframeStage({ sessionId, launch, onPhase, onClock, onNotice, onEnded }: StageProps<IframeLaunch>) {
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -48,7 +48,7 @@ export default function IframeStage({ sessionId, launch, onPhase, onClock, onNot
       try {
         const r = await post("media_ready", payload);
         if (unmounted.current) return;
-        if (r.practice_ends_at) cb.current.onClock(r.practice_ends_at * 1000);
+        if (r.seconds_left != null) cb.current.onClock(performance.now() + r.seconds_left * 1000);
         cb.current.onPhase("in_call");
         if (!r.live) cb.current.onEnded("settled_elsewhere");
         return;

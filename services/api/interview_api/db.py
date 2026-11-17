@@ -19,6 +19,9 @@ def make_pool(dsn: str, max_size: int = 20) -> AsyncConnectionPool:
         min_size=1,
         max_size=max_size,
         open=False,
+        # Test a connection before handing it out, so a database restart doesn't turn
+        # the first requests after it into errors.
+        check=AsyncConnectionPool.check_connection,
         # No server-side prepared statements, so a transaction-mode pooler is safe.
         kwargs={"row_factory": dict_row, "autocommit": True, "prepare_threshold": None},
     )

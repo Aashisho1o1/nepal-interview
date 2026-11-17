@@ -228,7 +228,7 @@ def compute_funding(snapshot: dict[str, Any]) -> FundingSummary:
         if avail is None:
             note = "availability date not confirmed"
             questions.append(f"How and when will the {label.lower()} be available when needed?")
-        elif start and avail > start:
+        elif start and avail > start and v.get("kind") != "paid_deposit":  # paid = on time
             note = f"available {avail.isoformat()}, after programme start {start.isoformat()}"
             questions.append(
                 f"The {label.lower()} is shown as available after your programme starts. "

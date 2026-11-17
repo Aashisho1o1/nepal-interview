@@ -41,6 +41,8 @@ const cspReportOnly = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // Longer than the page's 45 s wait for a session start, which can take two vendor calls.
+  experimental: { proxyTimeout: 60_000 },
   devIndicators: { position: "bottom-right" },
   async rewrites() {
     return ON_VERCEL ? [] : [{ source: "/api/:path*", destination: `${API_ORIGIN}/api/:path*` }];

@@ -115,7 +115,7 @@ export default function Interview() {
   useEffect(() => {
     if (!endsAt || !live) return;
     const t = setInterval(() => {
-      const ts = Date.now();
+      const ts = performance.now(); // not Date.now(): changing the phone's clock can't affect it
       setNow(ts);
       if (ts >= endsAt) void endNow("deadline");
     }, 250);
@@ -137,10 +137,12 @@ export default function Interview() {
       return;
     }
     // One key per intended start, reused on retry so the server returns the same session.
-    let key = sessionStorage.getItem(KEY_STORE);
+    // Per interviewer, so switching after a failed start doesn't resume the other one.
+    const store = `${KEY_STORE}:${providerId}`;
+    let key = sessionStorage.getItem(store);
     if (!key) {
       key = crypto.randomUUID();
-      sessionStorage.setItem(KEY_STORE, key);
+      sessionStorage.setItem(store, key);
     }
     try {
       const s = await api<StartResp>("/sessions", {
@@ -149,7 +151,7 @@ export default function Interview() {
         json: { track: "uk_pre_cas", provider_id: providerId },
         signal: AbortSignal.timeout(45_000), // the server may wait on two vendor calls
       });
-      sessionStorage.removeItem(KEY_STORE);
+      sessionStorage.removeItem(store);
       if (goneRef.current) {
         // Left while it was starting: end it now instead of leaving it to time out.
         navigator.sendBeacon(`/api/sessions/${s.session_id}/end?reason=page_exit`, new Blob([""], { type: "text/plain" }));
@@ -159,9 +161,10 @@ export default function Interview() {
       setLive({ id: s.session_id, launch: s.launch });
       setPhase("connecting");
     } catch (e) {
-      // Keep the key when the server never answered or is still connecting, so the
-      // retry returns the same session instead of hitting "session already live".
-      if (e instanceof ApiError && e.code !== "launch_in_progress") sessionStorage.removeItem(KEY_STORE);
+      // Keep the key unless the API itself answered (a timeout or a proxy error may hide
+      // a session that did start), so the retry returns that session.
+      const answered = e instanceof ApiError && (e.body.error || e.body.detail);
+      if (answered && e.code !== "launch_in_progress") sessionStorage.removeItem(store);
       setPhase("error");
       if (e instanceof ApiError && e.code === "session_already_live") setLiveConflict(String(e.body.session_id ?? ""));
       setError(e instanceof ApiError ? e.message : "Could not start.");

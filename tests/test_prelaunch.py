@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 
 import pytest
 
-from conftest import login_student, ready_student, start
+from conftest import login_student, media_ready, ready_student, start
+from interview_api import plans
 from test_video_providers import ENV, LITE, Vendors
 
 
@@ -124,7 +126,7 @@ async def test_a_corrected_fact_cannot_grow_without_limit(make_env):
     f = next(x for x in facts if isinstance(x["value_json"], dict))
     r = await c.patch(
         f"/api/profile/facts/{f['ref']}",
-        json={"status": "corrected", "value": {"label": "x" * 1_000_000}},
+        json={"status": "corrected", "value": {"label": "x" * 1_000}},  # over the 400-character cap
     )
     assert r.status_code == 422
 
@@ -146,3 +148,69 @@ async def test_simultaneous_first_snapshots_both_succeed(make_env):
         )
         rs = await asyncio.gather(*(c.post("/api/profile/snapshot") for _ in range(4)))
     assert [r.status_code for r in rs] == [200] * 4
+
+
+# ---------------------------------------------------------------- round 1 (2026-11-17)
+
+
+async def test_a_huge_request_body_is_refused_before_it_is_read_in_full(make_env):
+    env = await make_env()
+    async with env.client() as c:
+        r = await c.post("/api/auth/login", content=b'{"email":"' + b"a" * 100_000 + b'"}')
+    assert r.status_code == 413
+
+
+async def test_the_clock_reply_gives_seconds_left_so_the_phone_clock_does_not_matter(make_env):
+    env = await make_env()
+    c = await ready_student(env)
+    sid = (await start(c)).json()["session_id"]
+    reply = await media_ready(c, sid)
+    assert 115 < reply["seconds_left"] <= 120
+
+
+async def test_typos_from_one_network_do_not_block_a_room_from_a_right_code(make_env):
+    env = await make_env()
+    await env.sql(
+        "INSERT INTO promo_codes (code_hash, label, premium_seconds, basic_seconds, valid_days) "
+        "VALUES (%s,'room',120,0,30)",
+        (plans.code_hash("LEEDS2027"),),
+    )
+    for i in range(5):  # five students mistype it on the venue Wi-Fi
+        s = await login_student(env, f"t{i}@synthetic.test", "T", entitlements={})
+        assert (await s.post("/api/promo/redeem", json={"code": "LEEDS2072"})).status_code == 404
+    late = await login_student(env, "late@synthetic.test", "L", entitlements={})
+    assert (await late.post("/api/promo/redeem", json={"code": "LEEDS2027"})).status_code == 200
+
+
+async def test_saving_unchanged_details_does_not_add_a_snapshot(make_env):
+    env = await make_env()
+    c = await login_student(env, "a@synthetic.test", "A", entitlements={})
+    details = {"university": "Leeds", "tuition_gbp": "18500", "savings_gbp": "0"}  # 0 = none
+    first = await c.put("/api/profile/details", json=details)
+    second = await c.put("/api/profile/details", json=details)
+    assert first.status_code == second.status_code == 200
+    assert first.json()["version"] == second.json()["version"]
+
+
+async def test_funds_without_costs_are_refused_and_a_paid_deposit_is_on_time(make_env):
+    env = await make_env()
+    c = await login_student(env, "a@synthetic.test", "A", entitlements={})
+    r = await c.put("/api/profile/details", json={"savings_gbp": "20000"})
+    assert r.status_code == 422 and "tuition" in r.json()["detail"]
+    this_month = date.today().isoformat()[:7]  # saving during the start month
+    r = await c.put(
+        "/api/profile/details",
+        json={"tuition_gbp": "18500", "deposit_gbp": "5000", "start_month": this_month},
+    )
+    assert r.status_code == 200
+    assert not any("after your programme starts" in q for q in r.json()["funding"]["questions"])
+
+
+async def test_ending_a_session_twice_stops_the_vendor_once(make_env):
+    vendors = Vendors()
+    env = await make_env(provider_env=ENV, provider_http=vendors.client)
+    c = await ready_student(env)
+    sid = (await start(c, LITE)).json()["session_id"]
+    for _ in range(2):
+        assert (await c.post(f"/api/sessions/{sid}/end")).status_code == 200
+    assert len(vendors.to("/v1/sessions/stop")) == 1

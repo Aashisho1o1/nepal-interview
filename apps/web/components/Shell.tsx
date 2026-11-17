@@ -3,7 +3,6 @@
 // Every page shares this header; inner pages add the four-step navigation and a title.
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, firstName, type Me } from "@/lib/api";
 
@@ -26,7 +25,6 @@ type Props = {
 };
 
 export default function Shell({ step, title, intro, width = "page", me: given, locked = false, children }: Props) {
-  const router = useRouter();
   const [fetched, setFetched] = useState<Me | null>(null);
   const me = given === undefined ? fetched : given;
   useEffect(() => {
@@ -35,8 +33,9 @@ export default function Shell({ step, title, intro, width = "page", me: given, l
 
   async function signOut() {
     await api("/auth/logout", { method: "POST" }).catch(() => undefined);
-    router.push("/");
-    router.refresh();
+    // A full reload on purpose, so nothing from the account stays on screen.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign("/");
   }
 
   return (
@@ -51,7 +50,7 @@ export default function Shell({ step, title, intro, width = "page", me: given, l
             {me ? (
               <>
                 <span>Hi, {firstName(me)}</span>
-                <button type="button" className="btn btn-ghost" onClick={signOut}>Sign out</button>
+                {!locked && <button type="button" className="btn btn-ghost" onClick={signOut}>Sign out</button>}
               </>
             ) : (
               // A plain link fires "hashchange", so the home page opens its form in sign-in mode.
