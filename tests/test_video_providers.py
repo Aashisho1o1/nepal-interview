@@ -29,10 +29,15 @@ ENV = {
 class Vendors:
     """Stands in for all three vendors and records every call."""
 
-    def __init__(self, mint_status=200, stop_status=200, mint_body=None):
+    def __init__(self, mint_status=200, stop_status=200, mint_body=None, hold_token=False):
         self.calls: list[httpx.Request] = []
         self.mint_status, self.stop_status, self.mint_body = mint_status, stop_status, mint_body
         self.client = httpx.AsyncClient(transport=httpx.MockTransport(self.handle))
+        # With hold_token, the token call sets `started` and waits for `release`, so a
+        # test can act while the vendor is still creating the session.
+        self.started, self.release = asyncio.Event(), asyncio.Event()
+        if not hold_token:
+            self.release.set()
 
     def to(self, path: str) -> list[httpx.Request]:
         return [c for c in self.calls if c.url.path == path]
@@ -42,6 +47,8 @@ class Vendors:
         await asyncio.sleep(0.05)  # long enough for concurrent starts to overlap
         path = req.url.path
         if path == "/v1/sessions/token":
+            self.started.set()
+            await self.release.wait()
             body = self.mint_body or {"data": {"session_id": "la-1", "session_token": "la-tok"}}
             return httpx.Response(self.mint_status, json=body)
         if path == "/v1/sessions/stop":

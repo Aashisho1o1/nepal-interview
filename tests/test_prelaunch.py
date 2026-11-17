@@ -14,15 +14,15 @@ from test_video_providers import ENV, LITE, Vendors
 async def test_a_launch_that_finishes_after_the_session_ended_is_withheld_and_stopped(make_env):
     """The student ends a session (or it is refunded) while the vendor is still creating
     it. The late launch must not reach the student and must be stopped at the vendor."""
-    vendors = Vendors()
+    vendors = Vendors(hold_token=True)
     env = await make_env(provider_env=ENV, provider_http=vendors.client)
     c = await ready_student(env)
 
     starting = asyncio.create_task(start(c, LITE))
-    while not vendors.calls:  # wait until the vendor is creating the session (it takes 50 ms)
-        await asyncio.sleep(0.005)
+    await asyncio.wait_for(vendors.started.wait(), 5)  # the vendor is creating the session
     [sess] = (await c.get("/api/sessions")).json()
     assert (await c.post(f"/api/sessions/{sess['id']}/end")).status_code == 200
+    vendors.release.set()
 
     r = await starting
     assert r.status_code == 409 and r.json()["error"] == "session_ended"
@@ -31,14 +31,14 @@ async def test_a_launch_that_finishes_after_the_session_ended_is_withheld_and_st
 
 
 async def test_a_failed_stop_of_a_late_launch_is_left_for_the_reconciler(make_env):
-    vendors = Vendors(stop_status=500)
+    vendors = Vendors(stop_status=500, hold_token=True)
     env = await make_env(provider_env=ENV, provider_http=vendors.client)
     c = await ready_student(env)
     starting = asyncio.create_task(start(c, LITE))
-    while not vendors.calls:
-        await asyncio.sleep(0.005)
+    await asyncio.wait_for(vendors.started.wait(), 5)
     [sess] = (await c.get("/api/sessions")).json()
     await c.post(f"/api/sessions/{sess['id']}/end")
+    vendors.release.set()
     assert (await starting).status_code == 409
     [row] = await env.sql(
         "SELECT vendor_ref, vendor_closed_at, launch_json FROM interview_sessions"
@@ -151,15 +151,23 @@ async def test_a_huge_request_body_is_refused_before_it_is_read_in_full(make_env
     async with env.client() as c:
         r = await c.post("/api/auth/login", content=b'{"email":"' + b"a" * 100_000 + b'"}')
         assert r.status_code == 413
+        # The cap is 64,000 bytes: exactly that is let through (and fails as bad JSON).
+        assert (await c.post("/api/auth/login", content=b"a" * 64_000)).status_code != 413
+        assert (await c.post("/api/auth/login", content=b"a" * 64_001)).status_code == 413
+
+        sent = 0
 
         async def chunks():  # streamed, so there is no Content-Length to check up front
+            nonlocal sent
             for _ in range(20):
+                sent += 1
                 yield b"a" * 8_000
 
         r = await c.post(
             "/api/auth/login", content=chunks(), headers={"content-type": "application/json"}
         )
     assert r.status_code == 413 and r.headers["cache-control"] == "no-store"
+    assert sent == 9  # reading stopped at the chunk that passed 64,000 bytes, not at 20
 
 
 async def test_the_clock_reply_gives_seconds_left_so_the_phone_clock_does_not_matter(make_env):
@@ -231,9 +239,14 @@ async def test_saving_unchanged_details_does_not_add_a_snapshot(make_env):
     third = await c.put("/api/profile/details", json=details)
     assert third.json()["version"] == first.json()["version"] + 1
 
-    await env.sql("UPDATE profile_snapshots SET version=version+998")  # now 999 and 1000
-    r = await c.put("/api/profile/details", json={**details, "savings_gbp": "100"})
-    assert r.status_code == 429
+
+async def test_saving_in_a_loop_is_limited_and_unchanged_saves_are_not_audited(make_env):
+    env = await make_env()
+    c = await login_student(env, "a@synthetic.test", "A", entitlements={})
+    details = {"university": "Leeds", "tuition_gbp": "18500"}
+    codes = [(await c.put("/api/profile/details", json=details)).status_code for _ in range(21)]
+    assert codes == [200] * 20 + [429]
+    assert len(await env.sql("SELECT 1 FROM audit_events WHERE action='profile.details'")) == 1
 
 
 async def test_funds_without_costs_are_refused_and_a_paid_deposit_is_on_time(make_env):

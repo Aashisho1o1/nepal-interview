@@ -51,6 +51,7 @@ jobs:
       # The build writes the route types that the type check needs.
       - run: npm run build
       - run: npx tsc --noEmit
+      - run: npm test
       - run: npm audit --omit=dev --audit-level=high
 
   # Browser smoke test (apps/web/e2e) against the real API. A separate job, so a flaky

@@ -29,6 +29,7 @@ export function connectFailureNotice(e: unknown) {
 export function trackCall(sessionId: string, cb: RefObject<StageCallbacks>) {
   let ended = false;
   let connected = false;
+  let endsAt: number | null = null;
   const mountedAt = performance.now();
 
   const post = (kind: string, payload: Record<string, unknown> = {}) =>
@@ -40,12 +41,22 @@ export function trackCall(sessionId: string, cb: RefObject<StageCallbacks>) {
     cb.current.onEnded(reason);
   };
 
+  // Only ever moves the end earlier: a reply that was slow to arrive would move it later.
+  // Earlier still gets through, so a phone whose clock paused in sleep is corrected.
+  const clock = (r: EventReply) => {
+    const left = secondsLeft(r);
+    if (left == null) return;
+    const at = performance.now() + left * 1000;
+    if (endsAt == null || at < endsAt) cb.current.onClock((endsAt = at));
+  };
+
   const heartbeat = setInterval(async () => {
     if (!connected || ended) return;
     try {
       const r = await post("heartbeat");
+      if (ended) return; // closed while the request was out
       if (!r.live) finish("settled_elsewhere");
-      else if (secondsLeft(r) != null) cb.current.onClock(performance.now() + secondsLeft(r)! * 1000); // re-sync if the phone slept
+      else clock(r);
     } catch {
       /* transient; the server tolerates missed heartbeats */
     }
@@ -68,7 +79,7 @@ export function trackCall(sessionId: string, cb: RefObject<StageCallbacks>) {
         try {
           const r = await post("media_ready", payload);
           if (ended) return;
-          if (secondsLeft(r) != null) cb.current.onClock(performance.now() + secondsLeft(r)! * 1000);
+          clock(r);
           // Not "Your turn": the interviewer usually speaks first. Turn-taking comes
           // from the stage's own events, when the vendor sends them.
           cb.current.onPhase("in_call");

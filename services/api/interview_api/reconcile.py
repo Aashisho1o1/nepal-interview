@@ -41,8 +41,10 @@ async def close_vendor(pool, sess, registry) -> bool:
     embeds have nothing to stop server-side (the browser unmounts the iframe and the
     vendor's own cap is the backstop); a provider that was removed from config counts
     as closed."""
+    # Once one stop succeeded, a later call skips it. Two calls at the same moment can
+    # both stop the call; that's harmless.
     if sess.get("vendor_closed_at"):
-        return True  # already stopped: don't call the vendor again
+        return True
     prov = registry.providers.get(sess.get("provider_id"))
     ok = await prov.close(sess) if prov else True
     if ok:

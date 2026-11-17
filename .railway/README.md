@@ -69,3 +69,10 @@ Only once a plan shows 0 to destroy: edit `railway.ts`, then `railway config pla
 `railway config apply`. A resource removed from the file is deleted on apply; the CLI
 marks it as destructive first.
 Secrets stay in Shared Variables, never in this file.
+
+## Restoring an old backup
+
+A database backup from before 2026-11-02 no longer upgrades itself on deploy. Restore
+it, apply `schema.sql` from commit `7fbd037` to it first
+(`git show 7fbd037:services/api/interview_api/schema.sql | psql "$DATABASE_URL"`), then
+deploy.

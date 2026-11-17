@@ -61,6 +61,22 @@ test.describe("a new student", () => {
     await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
     await expect(page.getByText("Hi, Asha")).toHaveCount(0);
   });
+
+  // Where the first sign-out bug was: home kept greeting the student who had left.
+  test("signs in again, and signs out from the home page", async () => {
+    await page.goto("/#signin");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill("e2e-password");
+    await page.locator("#signin").getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL("/interview");
+    await page.goto("/");
+    await expect(page.getByText("Hi, Asha")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Practise now" })).toBeVisible();
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByText("Hi, Asha")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Start practising free" })).toBeVisible();
+  });
 });
 
 test("an old browser is told to update", async ({ page }) => {

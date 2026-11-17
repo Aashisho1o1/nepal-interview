@@ -57,7 +57,8 @@ cd apps/web && cp .env.example .env.local && npm ci && npm run dev
 ```
 
 Open http://localhost:3000 and create an account, or sign in as `student@synthetic.test`. The seeded student
-is synthetic: its "About you" form starts filled with example details.
+is synthetic: its "About you" form starts filled with example details. Re-running the
+seed doesn't change the facts of a demo account that already exists.
 
 Paste `interviewer/officer_miller_prompt.md` into the ElevenLabs agent; the app sends
 the `{{variables}}` it references on every session.

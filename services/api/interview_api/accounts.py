@@ -4,6 +4,7 @@ A new account starts with only its name. Students add the rest on the "About you
 page, or practise without it. The demo account (seed script) also gets the example
 applicant's facts. Those the form can edit start confirmed, so the form starts filled
 in and the interviewer knows them; the rest stay proposed, since nothing can remove them.
+Re-running the seed doesn't change an existing demo account's facts.
 """
 
 from __future__ import annotations

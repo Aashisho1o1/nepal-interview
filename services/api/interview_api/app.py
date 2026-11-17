@@ -122,6 +122,8 @@ def create_app(
     # network, so a room's typos don't lock everyone on its Wi-Fi out.
     app.state.code_tries = RateLimiter(max_hits=5, window_s=3600)
     app.state.code_tries_ip = RateLimiter(max_hits=50, window_s=3600)
+    # Every details save rewrites the facts, so one in a loop is slowed down.
+    app.state.detail_saves = RateLimiter(max_hits=20, window_s=600)
 
     @app.exception_handler(QuotaError)
     async def _quota_err(_req, e: QuotaError):
@@ -352,8 +354,6 @@ def create_app(
             and latest["funding_json"] == funding
         ):
             return latest  # nothing changed: don't store another copy
-        if version > 1000:
-            raise HTTPException(429, "Too many saves. Try again later.")
         cur = await conn.execute(
             "INSERT INTO profile_snapshots (student_id, version, confirmed_facts_json, "
             "funding_json) VALUES (%s,%s,%s,%s) RETURNING *",
@@ -376,12 +376,16 @@ def create_app(
 
     @app.put("/api/profile/details", dependencies=[Depends(origin_guard)])
     async def put_details(body: details.Details, st=Depends(current_student)):
+        student = str(st["student_id"])
+        if app.state.detail_saves.blocked(student):
+            raise HTTPException(429, "You're saving too often. Wait a few minutes and try again.")
+        app.state.detail_saves.hit(student)  # before any await, so parallel saves count too
         async with app.state.pool.connection() as conn, conn.transaction():
+            before = await _latest_snapshot(conn, st["student_id"])
             await details.save(conn, st["student_id"], body)
             row = await _new_snapshot(conn, st["student_id"])
-            await audit(
-                conn, str(st["user_id"]), "profile.details", "student", str(st["student_id"])
-            )
+            if not before or row["id"] != before["id"]:  # unchanged saves aren't audited
+                await audit(conn, str(st["user_id"]), "profile.details", "student", student)
         return {"version": row["version"], "funding": row["funding_json"]}
 
     async def _latest_snapshot(conn, student_id):

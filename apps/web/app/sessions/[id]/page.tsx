@@ -67,6 +67,7 @@ export default function SessionPage() {
     let stop = false;
     let tries = 0;
     async function poll() {
+      if (stop) return; // a retry timer that fired after the page closed
       try {
         const r = await api<Resp>(`/sessions/${id}/feedback`);
         if (stop) return;
