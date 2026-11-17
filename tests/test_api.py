@@ -22,7 +22,6 @@ from conftest import (
     VOICE_SECONDS,
     age_session,
     balance,
-    confirm_all_and_snapshot,
     key,
     login_student,
     media_ready,
@@ -82,27 +81,16 @@ async def test_login_rejects_bad_password_and_foreign_origin(make_env):
 # ---------------------------------------------------------------- facts & isolation
 
 
-async def test_students_can_practise_with_no_details_and_corrections_keep_shape(make_env):
-    env = await make_env()
-    c = await login_student(env, "a@synthetic.test", "Asha Student")
-    # No details checked, no snapshot: practice still starts, on an empty snapshot.
-    r = await start(c, VOICE)
+async def test_students_can_practise_with_no_details(make_env):
+    env = await make_env(free_voice_sessions_per_day=1)
+    async with env.client() as c:
+        assert (await signup(c, name="Asha Student")).status_code == 200
+        # No details, no snapshot: practice still starts, on an empty snapshot.
+        r = await start(c, VOICE)
     assert r.status_code == 200, r.text
     dv = r.json()["launch"]["dynamic_variables"]
     assert dv["student_first_name"] == "Asha"
     assert dv["university"] == dv["family_income"] == dv["funding_summary"] == "not provided"
-    r = await c.patch(
-        "/api/profile/facts/fund-loan", json={"status": "corrected", "value": {"new_key": "x"}}
-    )
-    assert r.status_code == 422
-    r = await c.patch(
-        "/api/profile/facts/fund-loan",
-        json={"status": "corrected", "value": {"available_by": "2027-07-15"}},
-    )
-    assert r.status_code == 200
-    snap = await confirm_all_and_snapshot(c)
-    assert snap["funding"]["gap_minor"] == 0
-    assert snap["missing"]["uk_pre_cas"] == []
 
 
 QUICK = {
@@ -121,8 +109,8 @@ async def test_about_you_quick_details_reach_the_interviewer(make_env):
     async with env.client() as c:
         assert (await signup(c, name="Sita")).status_code == 200
         # A new account starts with only its name.
-        assert (await c.get("/api/profile/facts")).json() == []
-        assert (await c.get("/api/profile/details")).json()["name"] == "Sita"
+        got = (await c.get("/api/profile/details")).json()
+        assert got["name"] == "Sita" and not any(v for k, v in got.items() if k != "name")
         r = await c.put("/api/profile/details", json=QUICK)
         assert r.status_code == 200, r.text
         assert "error" in r.json()["funding"]  # no costs given: no funding table
@@ -179,14 +167,18 @@ async def test_demo_account_form_starts_from_example_facts_and_saving_replaces_t
     c = await login_student(env, "a@synthetic.test", "A")
     got = (await c.get("/api/profile/details")).json()
     assert got["university"] == "Example University" and got["tuition_gbp"] == "18500"
+    # The interviewer knows them before the form is ever saved.
+    dv = (await start(c, VOICE)).json()["launch"]["dynamic_variables"]
+    assert dv["university"] == "Example University"
     f = (await c.put("/api/profile/details", json={**got, "living_gbp": "10000"})).json()["funding"]
     # Example tuition 18,500 replaced by the same typed value, not added to it.
     assert f["required_minor"] == 2_850_000
 
 
 async def test_session_with_no_details_still_gets_feedback(make_env):
-    env = await make_env()
-    c = await login_student(env, "a@synthetic.test", "A")
+    env = await make_env(free_voice_sessions_per_day=1)
+    c = env.client()
+    assert (await signup(c)).status_code == 200
     sid = (await start(c, VOICE)).json()["session_id"]
     await age_session(env, sid, ready_ago_s=90)
     await end(c, sid)
@@ -201,18 +193,15 @@ async def test_no_cross_student_access(make_env):
     a = await ready_student(env, "a@synthetic.test", "A")
     b = await ready_student(env, "b@synthetic.test", "B")
     sid = (await start(a)).json()["session_id"]
-    for path in (f"/api/sessions/{sid}", f"/api/sessions/{sid}/feedback"):
-        assert (await b.get(path)).status_code == 404
+    assert (await b.get(f"/api/sessions/{sid}/feedback")).status_code == 404
     assert (await end(b, sid)).status_code == 404
-    assert (await b.get("/api/sessions/not-a-uuid")).status_code == 404
+    assert (await b.get("/api/sessions/not-a-uuid/feedback")).status_code == 404
     assert (await b.get("/api/sessions")).json() == []
-    # B correcting "their" fund-loan must not touch A's fact.
-    await b.patch(
-        "/api/profile/facts/fund-loan", json={"status": "corrected", "value": {"amount": "1.00"}}
-    )
-    a_loan = [f for f in (await a.get("/api/profile/facts")).json() if f["ref"] == "fund-loan"][0]
-    assert a_loan["value_json"]["amount"] == "8500.00"
-    assert (await a.get(f"/api/sessions/{sid}")).status_code == 200
+    # B saving their details must not touch A's.
+    r = await b.put("/api/profile/details", json={"tuition_gbp": "1", "loan_gbp": "1"})
+    assert r.status_code == 200
+    assert (await a.get("/api/profile/details")).json()["loan_gbp"] == "8500"
+    assert (await a.get(f"/api/sessions/{sid}/feedback")).status_code == 200
 
 
 # ---------------------------------------------------------------- quota invariants

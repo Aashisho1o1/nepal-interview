@@ -10,7 +10,7 @@ agent; video on a HeyGen LiveAvatar embed. The phase plan is
 `docs/ELEVENLABS_LIVEAVATAR_FOCUS.md`; how interviewers plug in is `docs/PROVIDERS.md`.
 
 ```
-apps/web/                        Next.js 16 student UI: home, confirm facts, interview, feedback
+apps/web/                        Next.js 16 student UI: home, About you, interview, feedback
 services/api/interview_api/      FastAPI: auth, facts, credits, sessions, providers, feedback, reconciler
 packages/core/interview_core/    domain: the track, facts, funding maths, agent variables, scorecard + graders
 interviewer/                     the interviewer prompt (pasted into the ElevenLabs agent)

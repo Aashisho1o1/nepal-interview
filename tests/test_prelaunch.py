@@ -121,15 +121,10 @@ async def test_a_room_can_redeem_a_right_code_at_once(make_env):
     assert [r.status_code for r in rs] == [200] * 8
 
 
-async def test_a_corrected_fact_cannot_grow_without_limit(make_env):
+async def test_a_detail_cannot_grow_without_limit(make_env):
     env = await make_env()
     c = await login_student(env, "a@synthetic.test", "Student A")
-    facts = (await c.get("/api/profile/facts")).json()
-    f = next(x for x in facts if isinstance(x["value_json"], dict))
-    r = await c.patch(
-        f"/api/profile/facts/{f['ref']}",
-        json={"status": "corrected", "value": {"label": "x" * 1_000}},  # over the 400-character cap
-    )
+    r = await c.put("/api/profile/details", json={"english_test": "x" * 1_000})  # cap is 400
     assert r.status_code == 422
 
 
@@ -143,13 +138,9 @@ def test_huge_exponents_are_input_errors(bad):
 
 async def test_simultaneous_first_snapshots_both_succeed(make_env):
     env = await make_env()
-    async with env.client() as c:
-        await c.post(
-            "/api/auth/signup",
-            json={"name": "New", "email": "new@example.test", "password": "long-enough-pw"},
-        )
-        rs = await asyncio.gather(*(c.post("/api/profile/snapshot") for _ in range(4)))
-    assert [r.status_code for r in rs] == [200] * 4
+    c = await login_student(env, "a@synthetic.test", "A")  # no snapshot yet
+    rs = await asyncio.gather(*(start(c) for _ in range(4)))
+    assert sorted(r.status_code for r in rs) == [200, 409, 409, 409]  # one live session
 
 
 # ---------------------------------------------------------------- round 1 (2026-11-17)

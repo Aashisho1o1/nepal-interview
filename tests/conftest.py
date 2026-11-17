@@ -113,20 +113,9 @@ async def login_student(
     return c
 
 
-async def confirm_all_and_snapshot(c: httpx.AsyncClient) -> dict:
-    facts = (await c.get("/api/profile/facts")).json()
-    for f in facts:
-        r = await c.patch(f"/api/profile/facts/{f['ref']}", json={"status": "confirmed"})
-        assert r.status_code == 200
-    r = await c.post("/api/profile/snapshot")
-    assert r.status_code == 200
-    return r.json()
-
-
 async def ready_student(env: Env, email="a@synthetic.test", name="Student A", **kw):
-    c = await login_student(env, email, name, **kw)
-    await confirm_all_and_snapshot(c)
-    return c
+    """A signed-in demo student; its example facts start confirmed."""
+    return await login_student(env, email, name, **kw)
 
 
 def key() -> dict:

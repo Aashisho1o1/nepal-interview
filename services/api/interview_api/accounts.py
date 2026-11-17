@@ -2,7 +2,8 @@
 
 A new account starts with only its name. Students add the rest on the "About you"
 page, or practise without it. The demo account (seed script) also gets the example
-applicant's facts, so its form starts filled in.
+applicant's facts, already confirmed, so its form starts filled in and the
+interviewer knows them before the form is saved.
 """
 
 from __future__ import annotations
@@ -39,7 +40,8 @@ async def provision_student(
             value, label, snippet = name, "Your account", f"Name: {name}"
         await conn.execute(
             """INSERT INTO extracted_facts (student_id, ref, field_name, value_json,
-                 source_label, source_snippet) VALUES (%s,%s,%s,%s,%s,%s)
+                 source_label, source_snippet, confirmation_status)
+               VALUES (%s,%s,%s,%s,%s,%s,'confirmed')
                ON CONFLICT (student_id, ref) DO NOTHING""",
             (sid, ref, field, Jsonb(value), label, snippet),
         )

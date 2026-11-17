@@ -1,4 +1,4 @@
-"""Seed one synthetic student. Facts start as 'proposed' so the confirmation flow is real.
+"""Seed one synthetic student, with the example applicant's facts already confirmed.
 
 SEED_PASSWORD=... python -m interview_api.seed
 """

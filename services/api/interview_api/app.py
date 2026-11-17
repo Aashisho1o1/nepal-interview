@@ -7,7 +7,7 @@ import logging
 import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -17,10 +17,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from interview_core import POLICY_VERSION
 from interview_core.dynamic_vars import build_dynamic_variables
-from interview_core.facts import Fact, build_snapshot, missing_required
+from interview_core.facts import Fact, build_snapshot
 from interview_core.funding import FundingInputError, compute_funding, funding_or_none
 from interview_core.pricing import load_price_table
-from interview_core.tracks import TRACKS, get_track
+from interview_core.tracks import get_track
 
 from . import details, plans
 from .accounts import provision_student
@@ -311,52 +311,7 @@ def create_app(
     def _tier_enabled(modality: str) -> bool:
         return s.video_tier_enabled if modality == "avatar" else s.voice_tier_enabled
 
-    # ------------------------------------------------------------------ facts
-    @app.get("/api/profile/facts")
-    async def list_facts(st=Depends(current_student)):
-        async with app.state.pool.connection() as conn:
-            cur = await conn.execute(
-                "SELECT ref, field_name, value_json, source_label, source_snippet, "
-                "confirmation_status FROM extracted_facts WHERE student_id=%s ORDER BY field_name, ref",
-                (st["student_id"],),
-            )
-            return await cur.fetchall()
-
-    class FactUpdate(Strict):
-        status: Literal["confirmed", "corrected", "rejected"]
-        value: Any | None = None
-
-    def _same_shape(old: Any, new: Any) -> bool:
-        def short(v: Any) -> bool:  # a correction is a short value, never a document
-            return isinstance(v, (int, bool, type(None))) or (isinstance(v, str) and len(v) <= 400)
-
-        if isinstance(old, dict):
-            return isinstance(new, dict) and set(new) <= set(old) and all(map(short, new.values()))
-        return type(old) is type(new) and short(new)
-
-    @app.patch("/api/profile/facts/{ref}", dependencies=[Depends(origin_guard)])
-    async def update_fact(ref: str, body: FactUpdate, st=Depends(current_student)):
-        async with app.state.pool.connection() as conn, conn.transaction():
-            cur = await conn.execute(
-                "SELECT * FROM extracted_facts WHERE student_id=%s AND ref=%s FOR UPDATE",
-                (st["student_id"], ref),
-            )
-            f = await cur.fetchone()
-            if f is None:
-                raise HTTPException(404, "fact not found")
-            value = f["value_json"]
-            if body.status == "corrected":
-                if body.value is None or not _same_shape(value, body.value):
-                    raise HTTPException(422, "corrected value must keep the original shape")
-                value = {**value, **body.value} if isinstance(value, dict) else body.value
-            await conn.execute(
-                "UPDATE extracted_facts SET confirmation_status=%s, value_json=%s, updated_at=now() "
-                "WHERE id=%s",
-                (body.status, Jsonb(value), f["id"]),
-            )
-            await audit(conn, str(st["user_id"]), f"fact.{body.status}", "fact", ref)
-        return {"ok": True}
-
+    # ------------------------------------------------------------------ profile
     async def _new_snapshot(conn, student_id) -> dict:
         """Freeze the student's confirmed facts into a new snapshot version. Call inside a
         transaction."""
@@ -407,21 +362,6 @@ def create_app(
         )
         return await cur.fetchone()
 
-    def _snapshot_out(row) -> dict:
-        return {
-            "version": row["version"],
-            "funding": row["funding_json"],
-            "missing": {
-                t.id: missing_required(t, row["confirmed_facts_json"]) for t in TRACKS.values()
-            },
-        }
-
-    @app.post("/api/profile/snapshot", dependencies=[Depends(origin_guard)])
-    async def create_snapshot(st=Depends(current_student)):
-        async with app.state.pool.connection() as conn, conn.transaction():
-            row = await _new_snapshot(conn, st["student_id"])
-        return _snapshot_out(row)
-
     @app.get("/api/profile/details")
     async def get_details(st=Depends(current_student)):
         async with app.state.pool.connection() as conn:
@@ -443,7 +383,7 @@ def create_app(
             await audit(
                 conn, str(st["user_id"]), "profile.details", "student", str(st["student_id"])
             )
-        return _snapshot_out(row)
+        return {"version": row["version"], "funding": row["funding_json"]}
 
     async def _latest_snapshot(conn, student_id):
         cur = await conn.execute(
@@ -451,20 +391,6 @@ def create_app(
             (student_id,),
         )
         return await cur.fetchone()
-
-    @app.get("/api/profile/snapshot")
-    async def get_snapshot(st=Depends(current_student)):
-        async with app.state.pool.connection() as conn:
-            snap = await _latest_snapshot(conn, st["student_id"])
-        if not snap:
-            return {"version": None}
-        facts = snap["confirmed_facts_json"]
-        return {
-            "version": snap["version"],
-            "facts": facts["facts"],
-            "funding": snap["funding_json"],
-            "missing": {t.id: missing_required(t, facts) for t in TRACKS.values()},
-        }
 
     # ------------------------------------------------------------------ sessions
     class StartBody(Strict):
@@ -657,11 +583,6 @@ def create_app(
                 (st["student_id"],),
             )
             return [_public(r) for r in await cur.fetchall()]
-
-    @app.get("/api/sessions/{session_id}")
-    async def get_session(session_id: str, st=Depends(current_student)):
-        async with app.state.pool.connection() as conn:
-            return _public(await _own_session(conn, session_id, st["student_id"]))
 
     @app.post("/api/sessions/{session_id}/end", dependencies=[Depends(origin_guard)])
     async def end_session(
