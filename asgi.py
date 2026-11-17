@@ -1,4 +1,4 @@
-"""Entry point for hosted deployments (Vercel's Python runtime, or any ASGI server).
+"""Entry point for hosted deployments (Railway runs `uvicorn asgi:app`).
 
 The API and its domain package live in services/api and packages/core, which are not
 installed as packages, so they are put on the import path here.

@@ -94,7 +94,7 @@ class RateLimiter:
 
 
 def client_ip(request: Request) -> str:
-    """The host platform's edge (Railway, Vercel) sets X-Real-IP; the website's proxy
+    """Railway's edge sets X-Real-IP; the website's proxy
     passes it through. Locally there is none."""
     return request.headers.get("x-real-ip") or (request.client.host if request.client else "")
 
@@ -104,7 +104,7 @@ def check_origin(request: Request, allowed: tuple[str, ...]) -> None:
     alongside SameSite=Lax).
 
     Same-origin requests pass without configuration: the browser's Origin must name the
-    host the browser actually requested. The website's proxy (and Vercel's edge) put that
+    host the browser actually requested. The website's proxy puts that
     host in X-Forwarded-Host, overwriting anything a client sent. ALLOWED_ORIGINS adds
     extra origins on top."""
     origin = request.headers.get("origin")

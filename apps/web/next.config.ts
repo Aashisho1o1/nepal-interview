@@ -1,10 +1,8 @@
 import type { NextConfig } from "next";
 
 // The browser only ever talks to this origin, so the HttpOnly session cookie is
-// first-party. On Vercel, the project's routing sends /api/* to the API service before
-// a request reaches Next.js (see vercel.json). Locally, `next dev` proxies it here.
+// first-party. The website proxies /api/* to the API (on Railway, over the private network).
 const API_ORIGIN = process.env.SESSION_API_ORIGIN || "http://localhost:8000";
-const ON_VERCEL = Boolean(process.env.VERCEL);
 
 // Vendor iframes that may use the microphone (and camera, for vendors whose rooms ask
 // for it). Without listing them here, Permissions-Policy blocks the mic inside the
@@ -45,7 +43,7 @@ const nextConfig: NextConfig = {
   experimental: { proxyTimeout: 60_000 },
   devIndicators: { position: "bottom-right" },
   async rewrites() {
-    return ON_VERCEL ? [] : [{ source: "/api/:path*", destination: `${API_ORIGIN}/api/:path*` }];
+    return [{ source: "/api/:path*", destination: `${API_ORIGIN}/api/:path*` }];
   },
   async headers() {
     return [
