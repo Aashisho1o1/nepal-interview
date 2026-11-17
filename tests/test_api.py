@@ -554,6 +554,31 @@ async def test_signup_is_rate_limited_per_network_and_can_be_closed(make_env):
         assert (await signup(c)).status_code == 403
 
 
+async def test_network_limits_count_each_address_separately(make_env):
+    env = await make_env()
+    one, two = {"x-real-ip": "1.1.1.1"}, {"x-real-ip": "2.2.2.2"}
+    async with env.client() as c:
+        c.headers.update(one)
+        for i in range(5):
+            assert (await signup(c, email=f"u{i}@example.test")).status_code == 200
+        assert (await signup(c, email="u5@example.test")).status_code == 429
+        c.headers.update(two)
+        assert (await signup(c, email="u6@example.test")).status_code == 200
+
+    async with env.client() as c:
+
+        async def wrong_password(i, ip):  # a new email each time, so only the network counts
+            r = await c.post(
+                "/api/auth/login",
+                json={"email": f"x{i}@example.test", "password": "nope"},
+                headers=ip,
+            )
+            return r.status_code
+
+        assert [await wrong_password(i, one) for i in range(31)] == [401] * 30 + [429]
+        assert await wrong_password(31, two) == 401
+
+
 # ---------------------------------------------------------------- free plan and codes
 
 
@@ -621,6 +646,38 @@ async def test_free_plan_three_a_day_and_raising_it_tops_up_today(make_env):
         ("premium_seconds", 3 * VIDEO_SECONDS),
         ("premium_seconds", 3 * VIDEO_SECONDS),
     ]
+
+
+async def test_free_grants_change_on_nepal_midnight(make_env):
+    env = await make_env(free_voice_sessions_per_day=1)
+    await login_student(env, "a@synthetic.test", "A", entitlements={})
+    student = await _student_id(env, "a@synthetic.test")
+    async with env.pool.connection() as conn:
+        for now in ("2026-11-16T18:14:59Z", "2026-11-16T18:15:00Z"):  # Nepal is UTC+5:45
+            await plans.ensure_free_grants(conn, student, env.s, datetime.fromisoformat(now))
+    rows = await env.sql("SELECT package_version FROM entitlements ORDER BY package_version")
+    assert [r["package_version"] for r in rows] == [
+        "free-voice:2026-11-16",
+        "free-voice:2026-11-17",
+    ]
+
+
+async def test_free_time_is_used_before_a_promo_code(make_env):
+    env = await make_env(free_voice_sessions_per_day=1)
+    await _make_code(env, video=0, voice=1)
+    c = await ready_student(env, entitlements={})
+    assert (await c.post("/api/promo/redeem", json={"code": "LEEDS2027"})).status_code == 200
+    sid = (await start(c, VOICE)).json()["session_id"]
+    await age_session(env, sid, ready_ago_s=60)
+    await end(c, sid)
+    rows = {
+        r["package_version"].split(":")[0]: r
+        for r in await env.sql("SELECT package_version, consumed_seconds FROM entitlements")
+    }
+    today = datetime.now(plans.NEPAL).date().isoformat()
+    assert rows["free-voice"]["package_version"] == f"free-voice:{today}"
+    assert rows["free-voice"]["consumed_seconds"] == 60
+    assert rows["promo"]["consumed_seconds"] == 0
 
 
 NO_CREDIT = {"premium_seconds": 0, "basic_seconds": 0}
@@ -692,6 +749,23 @@ async def test_reconciler_reclaims_startup_timeouts_and_stale_sessions(make_env)
     assert (await balance(b, "basic_seconds"))["consumed"] == 30
     rep2 = await reconcile_once(env.pool, env.s, env.registry, feedback_grace_s=0)
     assert rep2 == {"startup_timeouts": 0, "stale_active": 0, "closed": 0, "graded": 0}
+
+
+async def test_reconciler_settles_a_session_past_its_hard_deadline_despite_heartbeats(make_env):
+    env = await make_env(teardown_grace_s=1, client_heartbeat_timeout_s=60)
+    c = await ready_student(env)
+    sid = (await start(c, VOICE)).json()["session_id"]
+    await ingest_transcript(env.pool, env.s, sid, [turn(1, "student", "hello there")])
+    # Ready 100 s ago and still sending heartbeats, but the deadline passed 30 s ago.
+    await age_session(env, sid, ready_ago_s=100, heartbeat_ago_s=0)
+    await env.sql(
+        "UPDATE interview_sessions SET hard_deadline_at = media_ready_at + interval '70 seconds'"
+    )
+    rep = await reconcile_once(env.pool, env.s, env.registry, feedback_grace_s=3600)
+    assert rep["stale_active"] == 1
+    [row] = await env.sql("SELECT * FROM interview_sessions")
+    assert row["status"] == "completed" and row["end_reason"] == "reconciled_stale"
+    assert row["charged_basic_seconds"] == 70  # charged up to the deadline only
 
 
 async def test_cron_reconcile_route_needs_the_secret_and_skips_overlapping_runs(make_env):

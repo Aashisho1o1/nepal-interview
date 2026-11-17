@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
 
 import pytest
 
-from conftest import login_student, media_ready, ready_student, start
+from conftest import age_session, login_student, media_ready, ready_student, start
 from interview_api import plans
 from test_video_providers import ENV, LITE, Vendors
 
@@ -20,7 +19,8 @@ async def test_a_launch_that_finishes_after_the_session_ended_is_withheld_and_st
     c = await ready_student(env)
 
     starting = asyncio.create_task(start(c, LITE))
-    await asyncio.sleep(0.02)  # the vendor is now creating the session (it takes 50 ms)
+    while not vendors.calls:  # wait until the vendor is creating the session (it takes 50 ms)
+        await asyncio.sleep(0.005)
     [sess] = (await c.get("/api/sessions")).json()
     assert (await c.post(f"/api/sessions/{sess['id']}/end")).status_code == 200
 
@@ -35,7 +35,8 @@ async def test_a_failed_stop_of_a_late_launch_is_left_for_the_reconciler(make_en
     env = await make_env(provider_env=ENV, provider_http=vendors.client)
     c = await ready_student(env)
     starting = asyncio.create_task(start(c, LITE))
-    await asyncio.sleep(0.02)
+    while not vendors.calls:
+        await asyncio.sleep(0.005)
     [sess] = (await c.get("/api/sessions")).json()
     await c.post(f"/api/sessions/{sess['id']}/end")
     assert (await starting).status_code == 409
@@ -46,18 +47,18 @@ async def test_a_failed_stop_of_a_late_launch_is_left_for_the_reconciler(make_en
     assert row["launch_json"] is None
 
 
-async def test_successful_sign_ins_are_rate_limited_per_network(make_env):
+async def test_successful_sign_ins_are_rate_limited_per_account(make_env):
     env = await make_env()
-    await login_student(env, "a@synthetic.test", "Student A")
+    await login_student(env, "a@synthetic.test", "Student A")  # the first of 8 allowed
     codes = []
     async with env.client() as c:
-        for _ in range(70):
+        for _ in range(10):
             r = await c.post(
                 "/api/auth/login",
                 json={"email": "a@synthetic.test", "password": "pw-for-tests-123"},
             )
             codes.append(r.status_code)
-    assert 429 in codes
+    assert codes == [200] * 7 + [429] * 3
 
 
 async def test_parallel_wrong_passwords_cannot_exceed_the_per_account_limit(make_env):
@@ -70,7 +71,8 @@ async def test_parallel_wrong_passwords_cannot_exceed_the_per_account_limit(make
                 for i in range(20)
             )
         )
-    assert sum(r.status_code == 401 for r in rs) <= 8
+    # The sign-in above used 1 of the 8 attempts.
+    assert sorted(r.status_code for r in rs) == [401] * 7 + [429] * 13
 
 
 async def test_correct_sign_ins_from_one_network_do_not_block_each_other(make_env):
@@ -173,8 +175,29 @@ async def test_the_clock_reply_gives_seconds_left_so_the_phone_clock_does_not_ma
     env = await make_env()
     c = await ready_student(env)
     sid = (await start(c)).json()["session_id"]
-    reply = await media_ready(c, sid)
-    assert 115 < reply["seconds_left"] <= 120
+    assert 115 < (await media_ready(c, sid))["seconds_left"] <= 120
+
+    async def heartbeat():
+        r = await c.post(f"/api/sessions/{sid}/client-events", json={"kind": "heartbeat"})
+        return r.json()
+
+    await age_session(env, sid, ready_ago_s=100)  # of 120 s
+    assert 15 < (await heartbeat())["seconds_left"] <= 20
+    await age_session(env, sid, ready_ago_s=200)
+    reply = await heartbeat()
+    assert reply["seconds_left"] == 0 and reply["live"] is True  # until it is ended
+    await c.post(f"/api/sessions/{sid}/end")
+    assert (await heartbeat())["live"] is False
+
+
+async def test_a_media_ready_after_the_end_does_not_start_the_clock(make_env):
+    env = await make_env()
+    c = await ready_student(env)
+    sid = (await start(c)).json()["session_id"]
+    assert (await c.post(f"/api/sessions/{sid}/end")).status_code == 200
+    assert (await media_ready(c, sid))["live"] is False
+    [row] = await env.sql("SELECT media_ready_at FROM interview_sessions")
+    assert row["media_ready_at"] is None
 
 
 async def test_typos_from_one_network_do_not_block_a_room_from_a_right_code(make_env):
@@ -190,6 +213,17 @@ async def test_typos_from_one_network_do_not_block_a_room_from_a_right_code(make
     late = await login_student(env, "late@synthetic.test", "L", entitlements={})
     assert not await env.sql("SELECT 1 FROM entitlements")  # {} means no starting time
     assert (await late.post("/api/promo/redeem", json={"code": "LEEDS2027"})).status_code == 200
+
+
+async def test_many_accounts_guessing_codes_from_one_network_are_blocked(make_env):
+    env = await make_env()
+    for i in range(10):  # each account's 5 wrong codes: 50 for the network, its limit
+        s = await login_student(env, f"g{i}@synthetic.test", "G", entitlements={})
+        for j in range(5):
+            r = await s.post("/api/promo/redeem", json={"code": f"GUESS{i}{j}"})
+            assert r.status_code == 404
+    fresh = await login_student(env, "fresh@synthetic.test", "F", entitlements={})
+    assert (await fresh.post("/api/promo/redeem", json={"code": "GUESS"})).status_code == 429
 
 
 async def test_saving_unchanged_details_does_not_add_a_snapshot(make_env):
@@ -216,10 +250,10 @@ async def test_funds_without_costs_are_refused_and_a_paid_deposit_is_on_time(mak
     c = await login_student(env, "a@synthetic.test", "A", entitlements={})
     r = await c.put("/api/profile/details", json={"savings_gbp": "20000"})
     assert r.status_code == 422 and "tuition" in r.json()["detail"]
-    this_month = date.today().isoformat()[:7]  # saving during the start month
+    # The deposit is dated today, after this start month, but it is paid, so on time.
     r = await c.put(
         "/api/profile/details",
-        json={"tuition_gbp": "18500", "deposit_gbp": "5000", "start_month": this_month},
+        json={"tuition_gbp": "18500", "deposit_gbp": "5000", "start_month": "2020-01"},
     )
     assert r.status_code == 200
     assert not any("after your programme starts" in q for q in r.json()["funding"]["questions"])
