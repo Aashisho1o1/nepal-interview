@@ -2,8 +2,8 @@
 
 A new account starts with only its name. Students add the rest on the "About you"
 page, or practise without it. The demo account (seed script) also gets the example
-applicant's facts, already confirmed, so its form starts filled in and the
-interviewer knows them before the form is saved.
+applicant's facts. Those the form can edit start confirmed, so the form starts filled
+in and the interviewer knows them; the rest stay proposed, since nothing can remove them.
 """
 
 from __future__ import annotations
@@ -13,6 +13,8 @@ from datetime import UTC, datetime, timedelta
 from psycopg.types.json import Jsonb
 
 from interview_core.synthetic import SYNTHETIC_FACTS
+
+from .details import OWNED_FIELDS
 
 ENTITLEMENT_DAYS = 30
 
@@ -41,9 +43,17 @@ async def provision_student(
         await conn.execute(
             """INSERT INTO extracted_facts (student_id, ref, field_name, value_json,
                  source_label, source_snippet, confirmation_status)
-               VALUES (%s,%s,%s,%s,%s,%s,'confirmed')
+               VALUES (%s,%s,%s,%s,%s,%s,%s)
                ON CONFLICT (student_id, ref) DO NOTHING""",
-            (sid, ref, field, Jsonb(value), label, snippet),
+            (
+                sid,
+                ref,
+                field,
+                Jsonb(value),
+                label,
+                snippet,
+                "confirmed" if field in OWNED_FIELDS else "proposed",
+            ),
         )
     cur = await conn.execute(
         "SELECT count(*)::int AS n FROM entitlements WHERE student_id=%s", (sid,)

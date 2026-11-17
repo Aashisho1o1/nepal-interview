@@ -8,7 +8,11 @@ import type { Launch, StageProps } from "@/lib/providers";
 const HEARTBEAT_MS = 15_000;
 const CLOCK_RETRY_MS = 2_000;
 
-type EventReply = { live: boolean; seconds_left: number | null };
+type EventReply = { live: boolean; seconds_left?: number | null; practice_ends_at: number | null };
+// Seconds of practice left. Falls back to the absolute end time only if the API is an
+// older version (for a moment during a deploy), which trusts the phone's clock.
+const secondsLeft = (r: EventReply) =>
+  r.seconds_left ?? (r.practice_ends_at != null ? r.practice_ends_at - Date.now() / 1000 : null);
 export type StageCallbacks = Pick<StageProps<Launch>, "onPhase" | "onClock" | "onNotice" | "onEnded">;
 
 // Throws NotAllowedError if the student refuses. Asked before the vendor session starts,
@@ -41,7 +45,7 @@ export function trackCall(sessionId: string, cb: RefObject<StageCallbacks>) {
     try {
       const r = await post("heartbeat");
       if (!r.live) finish("settled_elsewhere");
-      else if (r.seconds_left != null) cb.current.onClock(performance.now() + r.seconds_left * 1000); // re-sync if the phone slept
+      else if (secondsLeft(r) != null) cb.current.onClock(performance.now() + secondsLeft(r)! * 1000); // re-sync if the phone slept
     } catch {
       /* transient; the server tolerates missed heartbeats */
     }
@@ -64,7 +68,7 @@ export function trackCall(sessionId: string, cb: RefObject<StageCallbacks>) {
         try {
           const r = await post("media_ready", payload);
           if (ended) return;
-          if (r.seconds_left != null) cb.current.onClock(performance.now() + r.seconds_left * 1000);
+          if (secondsLeft(r) != null) cb.current.onClock(performance.now() + secondsLeft(r)! * 1000);
           // Not "Your turn": the interviewer usually speaks first. Turn-taking comes
           // from the stage's own events, when the vendor sends them.
           cb.current.onPhase("in_call");

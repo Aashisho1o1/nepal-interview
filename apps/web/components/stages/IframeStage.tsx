@@ -70,6 +70,7 @@ export default function IframeStage({ sessionId, launch, onPhase, onClock, onNot
   function onLoad() {
     loaded.current = true;
     call.current?.metric({ load_ms: Math.round(performance.now() - mountedAt.current) });
+    if (call.current?.isConnected()) return; // the clock already started (a reload inside the embed)
     if (launch.clock_start === "on_load") return void call.current?.ready("load");
     cb.current.onPhase("waiting_start");
     // If the embed starts by itself (no click needed), don't wait forever.

@@ -97,7 +97,7 @@ def create_app(
         app.state.pool = pool or make_pool(s.database_url)
         await app.state.pool.open()
         if s.apply_schema_on_start:
-            # Give up rather than queue every request behind an exclusive table lock.
+            # Give up rather than queue every request behind a table lock.
             await apply_schema(app.state.pool, lock_timeout_s=5)
         app.state.providers = load_registry(s, env=provider_env, http=provider_http)
         yield

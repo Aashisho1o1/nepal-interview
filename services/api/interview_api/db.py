@@ -30,9 +30,9 @@ async def apply_schema(pool: AsyncConnectionPool, *, lock_timeout_s: int = 0) ->
     """Idempotent. Several API instances can start at once; the lock makes
     them apply the schema one after another instead of racing on the DDL.
 
-    The ALTER statements need an exclusive table lock. With `lock_timeout_s` set, a
-    migration that cannot get it gives up (and can be re-run) instead of queueing and
-    blocking every request behind it."""
+    Some statements (CREATE INDEX) lock their tables against writes. With
+    `lock_timeout_s` set, start-up gives up after that long (and can be re-run) instead
+    of queueing every request behind the lock."""
     async with pool.connection() as conn, conn.transaction():
         if lock_timeout_s:  # set first, so waiting for the advisory lock times out too
             await conn.execute(f"SET LOCAL lock_timeout = '{int(lock_timeout_s)}s'")

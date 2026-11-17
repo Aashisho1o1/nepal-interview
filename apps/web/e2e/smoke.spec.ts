@@ -50,7 +50,9 @@ test.describe("a new student", () => {
     expect(starts).toEqual([]);
   });
 
-  test("signs out, and Back does not show the account", async () => {
+  // Covers Back to a page that reloads; Playwright's Chromium never restores pages from
+  // the back/forward cache, so Shell's pageshow reload isn't exercised here.
+  test("signs out, and Back sends a signed-out student home", async () => {
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL("/");
     await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
