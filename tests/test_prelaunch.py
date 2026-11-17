@@ -271,3 +271,12 @@ async def test_ending_a_session_twice_stops_the_vendor_once(make_env):
     for _ in range(2):
         assert (await c.post(f"/api/sessions/{sid}/end")).status_code == 200
     assert len(vendors.to("/v1/sessions/stop")) == 1
+
+
+async def test_two_saves_at_once_both_succeed(make_env):
+    """A double-click on Save sends two saves together; both must succeed, not one 500."""
+    env = await make_env()
+    c = await login_student(env, "a@synthetic.test", "A", entitlements={})
+    details = {"university": "Leeds", "course": "MSc Data Science"}
+    rs = await asyncio.gather(*(c.put("/api/profile/details", json=details) for _ in range(2)))
+    assert [r.status_code for r in rs] == [200, 200]

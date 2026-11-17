@@ -381,6 +381,11 @@ def create_app(
             raise HTTPException(429, "You're saving too often. Wait a few minutes and try again.")
         app.state.detail_saves.hit(student)
         async with app.state.pool.connection() as conn, conn.transaction():
+            # One save at a time per student: a double-click would otherwise rewrite the
+            # same facts twice at once and fail.
+            await conn.execute(
+                "SELECT 1 FROM student_profiles WHERE id=%s FOR NO KEY UPDATE", (st["student_id"],)
+            )
             before = await _latest_snapshot(conn, st["student_id"])
             await details.save(conn, st["student_id"], body)
             row = await _new_snapshot(conn, st["student_id"])
