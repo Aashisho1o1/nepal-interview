@@ -152,7 +152,7 @@ async def test_a_huge_request_body_is_refused_before_it_is_read_in_full(make_env
         r = await c.post("/api/auth/login", content=b'{"email":"' + b"a" * 100_000 + b'"}')
         assert r.status_code == 413
         # The cap is 64,000 bytes: exactly that is let through (and fails as bad JSON).
-        assert (await c.post("/api/auth/login", content=b"a" * 64_000)).status_code != 413
+        assert (await c.post("/api/auth/login", content=b"a" * 64_000)).status_code == 422
         assert (await c.post("/api/auth/login", content=b"a" * 64_001)).status_code == 413
 
         sent = 0

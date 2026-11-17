@@ -379,7 +379,7 @@ def create_app(
         student = str(st["student_id"])
         if app.state.detail_saves.blocked(student):
             raise HTTPException(429, "You're saving too often. Wait a few minutes and try again.")
-        app.state.detail_saves.hit(student)  # before any await, so parallel saves count too
+        app.state.detail_saves.hit(student)
         async with app.state.pool.connection() as conn, conn.transaction():
             before = await _latest_snapshot(conn, st["student_id"])
             await details.save(conn, st["student_id"], body)

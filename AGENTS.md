@@ -17,5 +17,5 @@ public domain. Never run `railway config apply` until a plan shows 0 to destroy:
   only slows this down.
 - **Payments.** The free plan and shared promo codes (`plans.py`) are the only ways to
   get practice time; paid packages are not built.
-- **Rate limits are per process.** Sign-up and wrong-code limits live in memory; with
-  more than one API instance they need a shared store.
+- **Rate limits are per process.** Sign-up, login, wrong-code and details-save limits
+  live in memory; with more than one API instance they need a shared store.
