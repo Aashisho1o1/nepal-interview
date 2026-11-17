@@ -149,10 +149,8 @@ async def start_session(
                         raise QuotaError(
                             402,
                             "insufficient_balance",
-                            "Your free video sessions are used up. Enter a code to get more."
-                            if mode == "avatar"
-                            else "You've used today's free voice session. Come back tomorrow, "
-                            "or enter a code to get more.",
+                            f"You've used today's free {'video' if mode == 'avatar' else 'voice'} "
+                            "sessions. Come back tomorrow, or enter a code to get more.",
                         )
 
                     now = datetime.now(UTC)

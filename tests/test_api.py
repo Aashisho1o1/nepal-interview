@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import timedelta
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -116,7 +117,9 @@ QUICK = {
 
 
 async def test_about_you_quick_details_reach_the_interviewer(make_env):
-    env = await make_env(free_voice_sessions_per_day=1, free_video_days=3)
+    env = await make_env(
+        free_voice_sessions_per_day=1, free_video_sessions_per_day=1, free_video_days=3
+    )
     async with env.client() as c:
         assert (await signup(c, name="Sita")).status_code == 200
         # A new account starts with only its name.
@@ -466,7 +469,9 @@ async def signup(c, email="new@example.test", name="  Sita   Rai ", password="lo
 
 
 async def test_signup_creates_a_signed_in_student_who_can_practise(make_env):
-    env = await make_env(free_voice_sessions_per_day=1, free_video_days=3)
+    env = await make_env(
+        free_voice_sessions_per_day=1, free_video_sessions_per_day=1, free_video_days=3
+    )
     async with env.client() as c:
         r = await signup(c, email="New@Example.TEST")
         assert r.status_code == 200, r.text
@@ -561,7 +566,9 @@ async def _student_id(env, email):
 
 
 async def test_free_plan_one_voice_a_day_and_video_on_the_first_three_days(make_env):
-    env = await make_env(free_voice_sessions_per_day=1, free_video_days=3)
+    env = await make_env(
+        free_voice_sessions_per_day=1, free_video_sessions_per_day=1, free_video_days=3
+    )
     async with env.client() as c:
         assert (await signup(c)).status_code == 200
         sid = (await start(c, VOICE)).json()["session_id"]
@@ -589,6 +596,31 @@ async def test_free_plan_one_voice_a_day_and_video_on_the_first_three_days(make_
         local = r["expires_at"].astimezone(plans.NEPAL)
         assert (local.hour, local.minute) == (0, 0)
         assert local.date().isoformat() > r["package_version"].split(":")[1]
+
+
+async def test_free_plan_three_a_day_and_raising_it_tops_up_today(make_env):
+    env = await make_env(free_voice_sessions_per_day=1, free_video_sessions_per_day=0)
+    await login_student(env, "a@synthetic.test", "A", entitlements=NO_CREDIT)
+    student = await _student_id(env, "a@synthetic.test")
+    now = datetime.now(UTC)
+    async with env.pool.connection() as conn:
+        await plans.ensure_free_grants(conn, student, env.s, now=now)  # old plan: 1 voice
+        three = replace(
+            env.s, free_voice_sessions_per_day=3, free_video_sessions_per_day=3, free_video_days=0
+        )
+        for day in (0, 0, 30):  # same day twice, then a month later: still every day
+            await plans.ensure_free_grants(conn, student, three, now=now + timedelta(days=day))
+    rows = await env.sql(
+        "SELECT bucket, granted_seconds FROM entitlements WHERE student_id=%s "
+        "AND package_version LIKE 'free-%%'",
+        (student,),
+    )
+    assert sorted((r["bucket"], r["granted_seconds"]) for r in rows) == [
+        ("basic_seconds", 3 * VOICE_SECONDS),  # today's single session topped up to three
+        ("basic_seconds", 3 * VOICE_SECONDS),
+        ("premium_seconds", 3 * VIDEO_SECONDS),
+        ("premium_seconds", 3 * VIDEO_SECONDS),
+    ]
 
 
 NO_CREDIT = {"premium_seconds": 0, "basic_seconds": 0}

@@ -16,7 +16,7 @@ import { DISCLAIMER, END_REASON, STATUS } from "@/lib/copy";
 type Home = { me: Me; last: SessionSummary | null };
 
 const STEPS: [string, string][] = [
-  ["Create your account", "Free: a voice session every day, and a video session on each of your first three days."],
+  ["Create your account", "Free: 3 video and 3 voice sessions every day."],
   ["Add your details, if you like", "Optional. Some interviewers use them to ask about your plans; you can go straight to practice."],
   ["Have a conversation", "Video or voice. Three questions, out loud, in two minutes."],
 ];

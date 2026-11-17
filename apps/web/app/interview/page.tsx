@@ -209,7 +209,7 @@ export default function Interview() {
               label: p.label,
               left: leftText(p),
               disabled: tierOff(p) || used(p),
-              note: tierOff(p) ? undefined : p.modality === "avatar" ? "No video sessions left" : "Next free session tomorrow",
+              note: tierOff(p) ? undefined : "Next free session tomorrow",
             }))}
             value={providerId || null}
             onChange={setProviderId}

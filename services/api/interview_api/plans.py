@@ -3,9 +3,11 @@ charging time is unchanged (quota.py).
 
 Free plan, per student, on Nepal calendar days:
 - voice: `free_voice_sessions_per_day` sessions every day;
-- video: one session a day on each of the account's first `free_video_days` days.
+- video: `free_video_sessions_per_day` sessions every day, or only on the account's first
+  `free_video_days` days when that is set.
 Each day's grant expires at the next midnight, so unused time never carries over. A
-session already running keeps its reservation past midnight.
+session already running keeps its reservation past midnight. Raising a setting tops up
+today's grant at once.
 
 Promo codes: one shared code for many students, created with
 `python -m interview_api.plans create ...`. Each student can redeem a code once.
@@ -30,7 +32,8 @@ VOICE_SECONDS = UK_PRE_CAS.format_for("voice").practice_seconds
 
 
 async def ensure_free_grants(conn, student_id, s: Settings, now: datetime | None = None) -> None:
-    """Idempotent: add today's free grants if they're missing."""
+    """Idempotent: add today's free grants if they're missing, or raise them if the
+    settings went up."""
     now = now or datetime.now(UTC)
     today = now.astimezone(NEPAL).date()
     midnight = datetime.combine(today + timedelta(days=1), time(0), NEPAL)
@@ -39,18 +42,25 @@ async def ensure_free_grants(conn, student_id, s: Settings, now: datetime | None
         grants.append(
             ("basic_seconds", s.free_voice_sessions_per_day * VOICE_SECONDS, "free-voice")
         )
-    if s.free_video_days > 0:
-        cur = await conn.execute(
-            "SELECT created_at FROM student_profiles WHERE id=%s", (student_id,)
-        )
-        joined = (await cur.fetchone())["created_at"].astimezone(NEPAL).date()
-        if 0 <= (today - joined).days < s.free_video_days:
-            grants.append(("premium_seconds", VIDEO_SECONDS, "free-video"))
+    if s.free_video_sessions_per_day > 0:
+        new_enough = True
+        if s.free_video_days > 0:
+            cur = await conn.execute(
+                "SELECT created_at FROM student_profiles WHERE id=%s", (student_id,)
+            )
+            joined = (await cur.fetchone())["created_at"].astimezone(NEPAL).date()
+            new_enough = 0 <= (today - joined).days < s.free_video_days
+        if new_enough:
+            grants.append(
+                ("premium_seconds", s.free_video_sessions_per_day * VIDEO_SECONDS, "free-video")
+            )
     for bucket, seconds, kind in grants:
         await conn.execute(
             """INSERT INTO entitlements (student_id, bucket, package_version, granted_seconds,
                  expires_at) VALUES (%s,%s,%s,%s,%s)
-               ON CONFLICT (student_id, bucket, package_version) DO NOTHING""",
+               ON CONFLICT (student_id, bucket, package_version) DO UPDATE
+                 SET granted_seconds = EXCLUDED.granted_seconds
+                 WHERE entitlements.granted_seconds < EXCLUDED.granted_seconds""",
             (student_id, bucket, f"{kind}:{today.isoformat()}", seconds, midnight),
         )
 

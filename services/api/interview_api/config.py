@@ -49,12 +49,15 @@ class Settings:
     signups_per_network_per_hour: int = field(
         default_factory=lambda: _int("SIGNUPS_PER_NETWORK_PER_HOUR", 5)
     )
-    # Free plan (see plans.py): voice sessions every day, and one video session on each
-    # of an account's first N days. 0 turns either off.
+    # Free plan (see plans.py): sessions per day, Nepal time. 0 turns a tier off.
+    # FREE_VIDEO_DAYS limits free video to an account's first N days; 0 = every day.
     free_voice_sessions_per_day: int = field(
-        default_factory=lambda: _int("FREE_VOICE_SESSIONS_PER_DAY", 1)
+        default_factory=lambda: _int("FREE_VOICE_SESSIONS_PER_DAY", 3)
     )
-    free_video_days: int = field(default_factory=lambda: _int("FREE_VIDEO_DAYS", 3))
+    free_video_sessions_per_day: int = field(
+        default_factory=lambda: _int("FREE_VIDEO_SESSIONS_PER_DAY", 3)
+    )
+    free_video_days: int = field(default_factory=lambda: _int("FREE_VIDEO_DAYS", 0))
     # Kill switches, one per tier.
     video_tier_enabled: bool = field(default_factory=lambda: _bool("VIDEO_TIER_ENABLED", True))
     voice_tier_enabled: bool = field(default_factory=lambda: _bool("VOICE_TIER_ENABLED", True))

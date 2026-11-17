@@ -97,8 +97,8 @@ place of the `--loop` process (Pro plan; it needs `CRON_SECRET`). The API is pub
 ## Free plan and promo codes
 
 Sessions are 2 minutes for video and 3 for voice, three questions each. Free plan:
-one voice session every day, and one video session on each of the first three days
-(Nepal time, no carry-over). More comes from a shared promo code, entered on the
+three voice and three video sessions every day (Nepal time, no carry-over; the numbers
+are settings in `config.py`). More comes from a shared promo code, entered on the
 practice page; each student can use a code once.
 
 ```bash

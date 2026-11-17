@@ -45,7 +45,7 @@ def settings(**kw) -> Settings:
         max_uncharged_per_day=50,
         # Free daily grants are off unless a test turns them on, so balances are exact.
         free_voice_sessions_per_day=0,
-        free_video_days=0,
+        free_video_sessions_per_day=0,
     )
     base.update(kw)
     return Settings(**base)

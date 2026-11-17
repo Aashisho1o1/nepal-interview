@@ -29,8 +29,7 @@ Ask the owner before doing this; it is not yet scheduled.
 ## Future work (owner decision, 2026-11-02)
 
 - **Email verification before the free plan.** Sign-up is open with no email check, so
-  one person can make several accounts and use each one's free daily voice session and
-  first-three-days video sessions. Before promoting the site publicly, verify the email
+  one person can make several accounts and use each one's free daily sessions. Before promoting the site publicly, verify the email
   (a one-time link) before granting free time. Grants live in
   `services/api/interview_api/plans.py`; the per-network sign-up limit in `app.py`
   only slows this down.
